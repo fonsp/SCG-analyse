@@ -2,6 +2,16 @@
 
 Clone this repository (available at [github.com/fons-/SCG-analyse](https://github.com/fons-/SCG-analyse)) to get started!
 
+
+
+Het project gebruikt deze veelgebruikte structuur: [cookiecutter data science](http://drivendata.github.io/cookiecutter-data-science/#data-is-immutable). Het belangrijkste is de verwerking van data: 
+
+In de `/data/` map zitten twee deelmappen: `origineel/` en `verwerkt/`. Het is belangrijk dat de originele data [nooit wordt bewerkt](http://drivendata.github.io/cookiecutter-data-science/#data-is-immutable), hierdoor wordt de analyse namelijk niet-reproduceerbaar. De data moet juist worden *verwerkt*: met een script de data lezen, er de belangrijke informatie uit halen en deze mogelijk opslaan in `verwerkt/`. 
+
+Omdat de inhoud van de eerste map (`origineel/`) nooit verandert (en erg groot kan zijn), en de inhoud van de tweede map (`verwerkt/`)  mbv de code gereproduceerd kan worden, worden deze mappen niet opgenomen in het Github-project (i.e. ze staan in de `.gitignore` van de repository).
+
+Verder is de data ook "geheim", en we hebben beloofd er zorgvuldig mee om te gaan. Hou dus een lijstje bij van alle plekken waar je het hebt opgeslagen, en verwijder kopieën die je niet gebruikt.
+
 ## Software
 
 Voor het gebruiken van Github raad ik [Github Desktop](https://desktop.github.com/) aan, je hoeft eigenlijk nooit een terminal te gebruiken. Ook de website zelf is erg handig (maar niet om commits mee te maken). 
@@ -67,5 +77,5 @@ When you open a Python Notebook, you should now be able to select the virtual en
 
 ## Visual Studio
 
-Open `grid-analysis.sln` in Visual Studio 2017 to get started. Make sure that the virtual environment is listed under "Python Environments" in the Solution Explorer. If possible, Activate the environment and Open its Interactive Environment. When viewing a `.py` file, you can press Ctrl+Enter to run a code block or selection. 
+Make sure that the virtual environment is listed under "Python Environments" in the Solution Explorer. If possible, Activate the environment and Open its Interactive Environment. When viewing a `.py` file, you can press Ctrl+Enter to run a code block or selection. 
 

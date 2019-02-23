@@ -110,4 +110,4 @@ venv*/
 *.glpk.glp
 *.pyomo.lp
 
-/data/
+
