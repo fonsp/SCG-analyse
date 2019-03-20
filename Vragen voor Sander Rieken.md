@@ -4,7 +4,7 @@
 1. Wat is specifiek de input/output (datatypes) van wat we schrijven?
 1. Moet het (uiteindelijk) realtime toepasbaar zijn?
 1. Wat is een cluster? Moet het gevoeliger zijn dan de warnings gegeven door DNV GL?
-1. 
+1. Moeten clusters een compliceerde vorm (cirkel, ovaal) hebben of is een rechthoek (in afstand/tijd) goed genoeg?
 
 
 ### Vragen over data:
