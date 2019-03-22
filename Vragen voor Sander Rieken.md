@@ -12,6 +12,7 @@
 1. Waarom komen de clusters [hier] niet overeen met de moffen uit de cable config?
 1. Wanneer wordt een warning gegeven?
 1. Kunnen we meer circuits krijgen?
+1. Klopt het dat de locaties niet continu zijn, maar al gediscretiseerd? (Op ~25cm?)
 
 
 ### Wat is jouw mening over:
