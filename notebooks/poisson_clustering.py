@@ -10,79 +10,154 @@ import ipywidgets
 from IPython.display import display, clear_output, Javascript, Markdown
 
 def subdirectories_of(path):
-	return [item.resolve() for item in path.iterdir() if item.is_dir()]
+    """
+    List all subdirectories in the folder indicated by path
+    
+    Parameters
+    ----------
+    
+    path: Path
+    path to directory of which the subdirectories are wanted
+    
+    Returns
+    -------
+    
+    subdirectories: list
+    list of all subdirectories in the folder indicated by path
+    """
+    return [item.resolve() for item in path.iterdir() if item.is_dir()]
 
 def load_data():
-	current_path = Path().resolve()
-	git_path = current_path
+    """
+    Load all data from all circuits into memory, reading from .csv files
+    
+    Returns
+    -------
+    circuits: list
+    list of circuit numbers
+    
+    cable_config: dict
+    dictionary with circuit numbers as keys and cable configurations as values
+    
+    partial_discharges: dict
+    dictionary with circuit numbers as keys and partial discharge information as values
+    
+    warning: dict
+    dictionary with circuit numbers as keys and warning information as values
+    """
+    current_path = Path().resolve()
+    git_path = current_path
 
-	# While we are not at the root of the git directory:
-	while not '.git' in map(lambda p: p.name, subdirectories_of(git_path)):
-		# Move one directory up, and check again
-		git_path = git_path.parent.resolve()
-		if len(git_path.parts) <= 1:
-			raise Warning("This script is not running in the git repository. Configure data path manually.")
+    # While we are not at the root of the git directory:
+    while not '.git' in map(lambda p: p.name, subdirectories_of(git_path)):
+        # Move one directory up, and check again
+        git_path = git_path.parent.resolve()
+        if len(git_path.parts) <= 1:
+            raise Warning("This script is not running in the git repository. Configure data path manually.")
 
 
-	data_path = git_path / "data" / "origineel"
+    data_path = git_path / "data" / "origineel"
 
-	if not Path(data_path).is_dir():
-		raise Warning("Data path does not exist")
-	data_file_paths = list(data_path.glob("*.csv"))
+    if not Path(data_path).is_dir():
+        raise Warning("Data path does not exist")
+    data_file_paths = list(data_path.glob("*.csv"))
 
-	if len(data_file_paths) == 0:
-		raise Warning("No .csv files found in " + str(data_path) + "; Note that data files are not stored in this repository, and must be downloaded manually.")
+    if len(data_file_paths) == 0:
+        raise Warning("No .csv files found in " + str(data_path) + "; Note that data files are not stored in this repository, and must be downloaded manually.")
 
 
-	# Geef het circuitnummer (4 cijfers) dat in de naam van een Path staat
-	circuitnum_from_file_path = lambda file_path: int(file_path.name.split('-')[0])
+    # Geef het circuitnummer (4 cijfers) dat in de naam van een Path staat
+    circuitnum_from_file_path = lambda file_path: int(file_path.name.split('-')[0])
 
-	# Drie dictionaries, met als keys de circuitnummers (int), als value de Pandas DataFrame van de .csv.
-	cable_config       = {circuitnum_from_file_path(fp): pd.read_csv(fp, sep=";") for fp in data_file_paths if 'cableconfig' in fp.name}
-	partial_discharges = {circuitnum_from_file_path(fp): pd.read_csv(fp, sep=";") for fp in data_file_paths if 'pd' in fp.name}
-	warning            = {circuitnum_from_file_path(fp): pd.read_csv(fp, sep=";") for fp in data_file_paths if 'warning' in fp.name}
+    # Drie dictionaries, met als keys de circuitnummers (int), als value de Pandas DataFrame van de .csv.
+    cable_config       = {circuitnum_from_file_path(fp): pd.read_csv(fp, sep=";") for fp in data_file_paths if 'cableconfig' in fp.name}
+    partial_discharges = {circuitnum_from_file_path(fp): pd.read_csv(fp, sep=";") for fp in data_file_paths if 'pd' in fp.name}
+    warning            = {circuitnum_from_file_path(fp): pd.read_csv(fp, sep=";") for fp in data_file_paths if 'warning' in fp.name}
 
-	# Sla de keys op van alle kabels waarvoor PD data bestaat.
-	circuits = list(partial_discharges)
+    # Sla de keys op van alle kabels waarvoor PD data bestaat.
+    circuits = list(partial_discharges)
 
-	return circuits, cable_config, partial_discharges, warning
+    return circuits, cable_config, partial_discharges, warning
 
 def identify_suspicious_areas(pd, cable_length, bin_size=4.0, count_charges=False, lower_limit_nominal=80.0/100.0, lower_limit_fault=95.0/100.0):
-	# Sla de drie kolomnamen van PD voor het gemak op
-	datetimeC, locC, chargeC = pd.columns
-	
-	# Lijst met bools die aangeeft of er op dat tijdstip een PD was
-	pd_occured = ~np.isnan(pd[locC])
-	
-	# De drie kolommen; alleen op tijdstippen met PD
-	locations = pd[locC][pd_occured]
-	charges = pd[chargeC][pd_occured]
-	times = pd[datetimeC][pd_occured].apply(lambda date_string: datetime.datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S"))
+    """
+    Make pds discrete in distance. Use Poisson distribution to identify suspicious number of pds in a bin.
+    Identify suspicious bins based on that rate.
+    
+    Parameters
+    ----------
+    
+    pd: DataFrame
+    pandas dataframe containing all pds, with columns datetime, location and charge
+    
+    cable_length: int
+    length of the cable (found in the cable configuration)
+    
+    bin_size: float
+    size of each bin in meters
+    
+    count_charges: bool
+    decides if charge of pds should be taken into consideration
+    
+    lower_limit_nominal: float
+    the percentage of bins that are expected to be "normal"
+    
+    lower_limit_fault: float
+    significance percentage, deciding at what confidence the Poisson distribution should describe a bin as "suspicious"
+    95.0/100.0 means there's a 5% chance a bin has a certain number of pds without actually being faulty
+    
+    Returns
+    -------
+    problem_areas: bool_array
+    array of booleans indicating which bins are suspicious
+    
+    locations: DataFrame
+    locations of all pds
+    
+    charges: DataFrame
+    charges of all pds
+    
+    times: DataFrame
+    times of all pds
+    
+    bins: ndarray
+    array of evenly spaced values, starting at 0 and going up to cable_length, in steps of bin_size
+    """
+    # Sla de drie kolomnamen van PD voor het gemak op
+    datetimeC, locC, chargeC = pd.columns
+    
+    # Lijst met bools die aangeeft of er op dat tijdstip een PD was
+    pd_occured = ~np.isnan(pd[locC])
+    
+    # De drie kolommen; alleen op tijdstippen met PD
+    locations = pd[locC][pd_occured]
+    charges = pd[chargeC][pd_occured]
+    times = pd[datetimeC][pd_occured].apply(lambda date_string: datetime.datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S"))
+    
+    bins = np.arange(start=0., stop=cable_length, step=bin_size)
+    # Tel inhoud van elk bakje:
+    binned_pds, _ = np.histogram(locations, bins=bins, weights=charges if count_charges else None)
+    
+    # Reken het nominale level uit:
+    nominal_pd_level = np.sort(binned_pds)[int(lower_limit_nominal * len(binned_pds))]
+    
+    # Bereken de parameter van de Poisson verdeling:
+    square = lambda x: x*x
 
-	bins = np.arange(start=0., stop=cable_length, step=bin_size)
-	# Tel inhoud van elk bakje:
-	binned_pds, _ = np.histogram(locations, bins=bins, weights=charges if count_charges else None)
-	
-	# Reken het nominale level uit:
-	nominal_pd_level = np.sort(binned_pds)[int(lower_limit_nominal * len(binned_pds))]
-	
-	# Bereken de parameter van de Poisson verdeling:
-	square = lambda x: x*x
-
-	phieta = scipy.stats.norm.ppf(q=lower_limit_nominal)
-	rate = .25*square(-phieta + np.sqrt(square(phieta) + 4*nominal_pd_level))
-
-	if rate == 0.0:
-		# rate was zero: fault_pd_level should be zero, not nan
-		fault_pd_level = 0.0
-	else:
-		# Als ik de ppf van de scipy.stats.poisson gebruik krijg ik alleen maar resultaten heel dichtbij M_{\eta}
-		# dat hoort niet (toch?)
-		fault_pd_level = scipy.stats.norm.ppf(q=lower_limit_fault, loc=rate, scale=rate)
-	
-	# Identificeer de probleemgebieden:
-	problem_areas = binned_pds > fault_pd_level
-	return problem_areas, locations, charges, times, bins
+    phieta = scipy.stats.norm.ppf(q=lower_limit_nominal)
+    rate = .25*square(-phieta + np.sqrt(square(phieta) + 4*nominal_pd_level))
+    
+    if rate == 0.0:
+        # rate was zero: fault_pd_level should be zero, not nan
+        fault_pd_level = 0.0
+    else:
+        # Als ik de ppf van de scipy.stats.poisson gebruik krijg ik alleen maar resultaten heel dichtbij M_{\eta}
+        # dat hoort niet (toch?)
+        fault_pd_level = scipy.stats.norm.ppf(q=lower_limit_fault, loc=rate, scale=rate)
+    
+    # Identificeer de probleemgebieden:
+    problem_areas = binned_pds > fault_pd_level
+    return problem_areas, locations, charges, times, bins
 
 def cluster_boolean_series(series, max_consecutive_false=2, min_length=0, min_count=3):
 	"""
