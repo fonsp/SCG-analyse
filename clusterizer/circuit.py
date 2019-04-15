@@ -163,12 +163,14 @@ class Circuit:
     Class that holds all relevant information related to a single SCG circuit (pd, propagation time, components).
     """
 
-    def __init__(self, circuitnr):
+    def __init__(self, circuitnr, hide_warning=False):
         """
         Create a circuit from a directoy name coming from the DNV GL datadump
         Example: '1910 - 2018-08 - [201096] - MSR S V GENTSTEEG -- MSR ACHTEROMSTRAAT (OS Weesp veld 147)'
         Relevant information is extracted from this directory name on initialization using a regular expression.
         """
+        if not hide_warning:
+            print("Het aanmaken van een Circuit-object is waarschijnlijk niet wat je wilt: gebruik `MergedCircuit({0})` ipv `Circuit({0})`".format(circuitnr))
         self.circuitnr = circuitnr
         circuitdir = str(circuitnr)+" - 1970-01 - [-1] - REDACTED -- REDACTED"
         self.circuitdir = circuitdir
@@ -311,7 +313,7 @@ class MergedCircuit(Circuit):
         self.circuits = []
 
         try:
-            self.circuits.append(Circuit(self.circuitnr))
+            self.circuits.append(Circuit(self.circuitnr, hide_warning=True))
             self.circuitid = self.circuits[-1].circuitid
             self.startlocation = self.circuits[-1].startlocation
             self.endlocation = self.circuits[-1].endlocation
