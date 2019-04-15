@@ -32,3 +32,18 @@ datadumpsdir = datadir / 'datadumps'
 datadumpdir = datadumpsdir / 'Datadump-server'
 cache = datadumpsdir / 'cache'
 circuitcache = cache / 'circuits'
+
+# Lijst van .csv-bestanden
+data_file_paths = list(data_path.glob("*.csv"))
+
+if len(data_file_paths) == 0:
+    raise Warning("No .csv files found in " + str(data_path) + "; Note that data files are not stored in this repository, and must be downloaded manually.")
+
+
+# Geef het circuitnummer (4 cijfers) dat in de naam van een Path staat
+circuitnum_from_file_path = lambda file_path: int(file_path.name.split('-')[0])
+
+partial_discharges = {circuitnum_from_file_path(fp) for fp in data_file_paths if 'pd' in fp.name}
+
+# Sla de nummers op van alle circuits waarvoor PD data bestaat.
+available_circuits = list(partial_discharges)
