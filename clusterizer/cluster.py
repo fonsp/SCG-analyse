@@ -7,6 +7,7 @@ class Cluster:
         self.location_range = location_range
         self.time_range = time_range
 
+    # Wordt opgeroepen als je `str(een_cluster)` of bv. `print(een_cluster)` schrijft.
     def __str__(self):
         sentences = []
         if self.location_range is not None:
