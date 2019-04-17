@@ -36,7 +36,7 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, d
         ax.scatter(x=locations, y=times, s=1, c=dot_colors)
     else:
         ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label="Circuit {0}".format(circuit.circuitnr))
-    ax.set_xlabel("Location")
+    ax.set_xlabel("Location (m)")
     ax.set_ylabel("Date")
 
 
@@ -85,10 +85,10 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     :type opacity: float, optional
 
     :param line_width: Width of warning line. Defaults to 1% of circuit length.
-    :type line_width: float
+    :type line_width: float, optional
 
     :param add_to_legend: Label warning colors?
-    :type add_to_legend: bool
+    :type add_to_legend: bool, optional
     """
     if ax is None:
         ax = plt.gca()
@@ -137,12 +137,12 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.3):
     # TODO: warn user when overlaying an empty plot
     show_date = cluster.time_range is not None and axis_is_in_datetime_format(ax.yaxis)
 
-    loc = cluster.location_range
+    loc = list(cluster.location_range)
     dates = cluster.time_range
     if show_date:
-        overlay_boolean_series(loc, True, ax, y1=dates[0], y2=dates[1], color=color, opacity=opacity)
+        overlay_boolean_series([True, True], loc=loc, ax=ax, y1=dates[0], y2=dates[1], color=color, opacity=opacity)
     else:
-        overlay_boolean_series(loc, True, ax, color=color, opacity=opacity)
+        overlay_boolean_series([True, True], loc=loc, ax=ax, color=color, opacity=opacity)
 
 
 def overlay_boolean_series(values, loc=None, ax=None, y1=None, y2=None, color='yellow', opacity=.3):
