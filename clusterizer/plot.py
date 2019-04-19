@@ -170,10 +170,13 @@ def overlay_boolean_series(values, loc=None, ax=None, y1=None, y2=None, color='y
         ax = plt.gca()
     ymin, ymax = ax.get_ylim()
     xmin, xmax = ax.get_xlim()
-    y1 = ymin if y1 is None else y1
-    y2 = ymax if y2 is None else y2
+    y_lower = ymin if y1 is None else y1
+    y_upper = ymax if y2 is None else y2
 
     if loc is None:
         loc = np.linspace(xmin, xmax, num=len(values))
 
-    ax.fill_between(loc, y1=y1, y2=y2, where=values, color=color, alpha=opacity)
+    ax.fill_between(loc, y1=y_lower, y2=y_upper, where=values, color=color, alpha=opacity)
+
+    # Omdat het gekleurde gebied misschien doorloopt tot de boven- en onderkanten van het plotgebied, wordt het plotgebied door matplotlib automatisch vergroot om dit te laten passen. Dit doen we ongedaan:
+    ax.set_ylim(ymin, ymax)
