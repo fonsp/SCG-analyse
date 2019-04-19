@@ -1,8 +1,11 @@
 class Cluster:
     def __init__(self, location_range=None, time_range=None):
         """
-        :param location_range: (Optional) Tuple containing left and right cluster bounds
+        :param location_range: (Optional) 2-Tuple containing left and right cluster bounds
+        :type location_range: tuple (float)
+
         :param time_range: (Optional) Tuple containing start and end dates of cluster
+        :type time_range: tuple (numpy.datetime64)
         """
         self.location_range = location_range
         self.time_range = time_range
