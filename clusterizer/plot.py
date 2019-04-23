@@ -69,7 +69,6 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
     counts, _, _ = ax.hist(circuit.pd["Location in meters (m)"], weights=hist_weights, bins=bins, color=color, label="Circuit {0}".format(circuit.circuitnr))
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Number of PDs")
-    return counts
 
 
 def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legend=True):
