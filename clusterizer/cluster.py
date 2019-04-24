@@ -18,3 +18,6 @@ class Cluster:
         if self.time_range is not None:
             sentences.append("{0} until {1}".format(*self.time_range))
         return "; ".join(sentences)
+
+    def __repr__(self):
+        return str(self)
