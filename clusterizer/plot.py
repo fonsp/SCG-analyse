@@ -115,6 +115,25 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
             ax.axvline(loc, linewidth=line_width, c=warningcolors[level], alpha=opacity, solid_capstyle="butt", label=label)
 
 
+def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.3):
+    """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
+
+    :param circuit: Cluster objects with time or location bounds defined.
+    :type circuit: list of class:`clusterizer.cluster.Cluster`
+
+    :param ax: Axes to draw on. Defaults to `plt.gca()`
+    :type ax: class:`matplotlib.axes.Axes`, optional
+
+    :param color: Fill color
+    :type color: color
+
+    :param opacity: Fill opacity (1=opaque; 0=invisible)
+    :type opacity: float, optional
+    """
+    for c in clusters:
+        overlay_cluster(c, ax, color, opacity)
+
+
 def overlay_cluster(cluster, ax=None, color=None, opacity=.3):
     """Draw a shaded rectangle matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
 
