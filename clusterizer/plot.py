@@ -1,6 +1,7 @@
+import datetime
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 def axis_is_in_datetime_format(axis):
@@ -71,6 +72,64 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
 
     counts, _, _ = ax.hist(circuit.pd["Location in meters (m)"], weights=hist_weights, bins=bins, color=color, label="Circuit {0}".format(circuit.circuitnr))
     ax.set_xlabel("Location (m)")
+    ax.set_ylabel("Number of PDs")
+
+
+def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=None, bins=None, sort=False, color='black'):
+    """
+    Draw a histogram, binning partial discharges along the time dimension.
+    
+    :param circuit: Circuit object
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
+    
+    :param partial_discharges: The partial discharges to be used to make the histogram. When set to None, circuit.pd[circuit.pd_occured] is used as a default.
+    :type partial_discharges: class:`pandas.core.frame.DataFrame`, optional
+    
+    :param weigh_charges: When set to `True`, PD charges are accumulated. otherwise PD occurences are counted.
+    :type weigh_charges: bool, optional
+    
+    :param ax: Axes to draw on. Defaults to `plt.gca()`
+    :type ax: class:`matplotlib.axes.Axes`, optional
+    
+    :param bins: When set to `None` (the default value), uniformly spaced bins of 1 day are used. If `bins` is a sequence, it defines a monotonically increasing array of bin edges, including the rightmost edge, allowing for non-uniform bin widths.
+    :type bins: Union[list,numpy.ndarray], optional
+    
+    :param sort: Indicates if the histogram should be sorted according to number of PDs in each bin
+    :type sort: bool, optional
+    
+    :param color: Bar color
+    :type color: color, optional
+    """
+    if ax is None:
+        ax = plt.gca()
+    if partial_discharges is None:
+        partial_discharges = circuit.pd[circuit.pd_occured]
+    time_column, location_column, charge_column = circuit.pd.columns
+    convert_times = lambda s: datetime.datetime.strptime(str(s), "%Y-%m-%d %H:%M:%S")
+    times = partial_discharges[time_column].apply(convert_times)
+    if bins is None: 
+        start_time = times[times.index[0]]
+        stop_time = times[times.index[-1]]
+        bins = np.arange(start = start_time, stop = stop_time, step = datetime.timedelta(days=1))
+    hist_weights = None
+    if weigh_charges:
+        hist_weights = partial_discharges[charge_column]
+        
+    hist, bins = np.histogram(times, bins, weights=hist_weights)
+    width = 1
+        
+    if sort:
+        hist = sorted(hist)
+        center = np.arange(0, 100, 100/len(hist))
+        ax.bar(center, hist, align='center', width=width, color=color)
+        ax.set_xlabel("Percentage of bins")
+    else:
+        bins_conv = np.array(list(map(convert_times, list(map(pd.Timestamp, bins)))))
+        delta = (bins[:-1] - bins[1:])/2
+        center = bins[1:] + delta
+        ax.bar(center, hist, align='center', width=width, color=color)
+        ax.set_xlabel("Time")
+    ax.set_title("Circuit {0}, from {1} meter to {2} meter".format(circuit.circuitnr, round(partial_discharges[location_column][partial_discharges.index[0]], 1), round(partial_discharges[location_column][partial_discharges.index[-1]], 1)))
     ax.set_ylabel("Number of PDs")
 
 
