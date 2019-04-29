@@ -64,4 +64,119 @@ class Cluster:
 
     def __hash__(self):
         return hash(self.location_range) + hash(self.time_range)
+    
+    def __and__(self, other):
+        """
+        Calculate the overlap between this cluster and another cluster
+        """
+        def overlap(first, second):
+            if first is not None and second is not None:
+                left_bound = max(first[0], second[0])
+                right_bound = min(first[1], second[1])
+                if left_bound > right_bound:
+                    return None
+                return (left_bound, right_bound)
+            if first is not None:
+                return first
+            return second
 
+        if other is None:
+            return None
+        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range))
+        if overlap_cluster.location_range is None and overlap_cluster.time_range is None:
+            return None
+        return overlap_cluster
+
+    def __rand__(self, other):
+        """
+        Right and. Needed to make things like 'None & Cluster' work
+        """
+        return self.__and__(other)
+
+    def __or__(self, other):
+        """
+        Calculate the smallest cluster which has both self and other as a subcluster
+        """
+        def least_common_superrange(first, second):
+            if first is not None and second is not None:
+                left_bound = min(first[0], second[0])
+                right_bound = max(first[1], second[1])
+                return (left_bound, right_bound)
+            return None
+        if other is None:
+            return None
+        return Cluster(least_common_superrange(self.location_range, other.location_range), least_common_superrange(self.time_range, other.time_range))
+
+    def __ror__(self, other):
+        return self.__or__(other)
+
+
+@total_ordering
+class WeightedCluster:
+    def __init__(self, cluster, weight=1):
+        """
+        :param cluster: Cluster object
+        :type cluster: class: `clusterizer.cluster.Cluster`
+
+        :param weight: The weight of the cluster, standard is 1
+        :type weight: integer, optional
+        """
+        self.cluster = cluster
+        self.weight = weight
+        
+    def __str__(self):
+        return str(self.cluster) + ": Weight " + str(self.weight)
+    
+    def __repr__(self):
+        return str(self)
+
+    def __lt__(self, other):
+        if self.cluster < other.cluster:
+            return True
+        if self.cluster == other.cluster and self.weight < other.weight:
+            return True
+        return False
+
+    def __eq__(self, other):
+        return self.cluster == other.cluster and self.weight == other.weight
+
+    def __hash__(self):
+        return self.weight * hash(self.cluster)
+
+    def __and__(self, other):
+        return WeightedCluster(self.cluster & other.cluster, weight=self.weight + other.weight)
+
+    def __rand__(self, other):
+        return self.__and__(other)
+
+    def __or__(self, other):
+        return WeightedCluster(self.cluster | other.cluster, weight=min(self.weight, other.weight))
+    
+    def __ror__(self, other):
+        return self.__or__(other)
+
+
+class WeightedClusterSet:
+    def __init__(self, wcs):
+        self.weighted_cluster_set = set(wcs)
+        
+    def __str__(self):
+        result = ""
+        for cluster in sorted(self.weighted_cluster_set):
+            result += str(cluster) + "\n"
+        return result
+    
+    def __repr__(self):
+        return str(self)
+
+    def __hash__(self):
+        hashed = 0
+        for cluster in self.weighted_cluster_set:
+            hashed += hash(cluster)
+        return hashed
+    
+    def as_set(self):
+        return self.weighted_cluster_set
+    
+    def as_list(self):
+        return list(self.weighted_cluster_set)
