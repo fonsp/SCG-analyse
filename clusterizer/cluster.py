@@ -1,3 +1,6 @@
+from functools import total_ordering
+
+@total_ordering
 class Cluster:
     def __init__(self, location_range=None, time_range=None):
         """
@@ -18,3 +21,24 @@ class Cluster:
         if self.time_range is not None:
             sentences.append("{0} until {1}".format(*self.time_range))
         return "; ".join(sentences)
+
+    def __lt__(self, other):
+        if self.time_range is None and other.time_range is None:
+            if other.location_range is None:
+                return False
+            if self.location_range is None:
+                return True
+            return self.location_range < other.location_range
+        if other.time_range is None:
+            return Cluster(self.location_range) < other
+        if self.time_range is None:
+            return self < Cluster(other.location_range)
+        if self.time_range == other.time_range:
+            return Cluster(self.location_range) < Cluster(other.location_range)
+        return self.time_range < other.time_range
+
+    def __eq__(self, other):
+        return self.location_range == other.location_range and self.time_range == other.time_range
+
+    def __hash__(self):
+        return hash(self.location_range) + hash(self.time_range)
