@@ -1,4 +1,6 @@
+<<<<<<< HEAD
 from functools import total_ordering
+import numpy as np
 
 @total_ordering
 class Cluster:
@@ -13,6 +15,24 @@ class Cluster:
         self.location_range = location_range
         self.time_range = time_range
 
+    def get_width(self):
+        """The distance in m between the two cluster edges. `numpy.inf` if undefined.
+
+        :rtype: float
+        """
+        if self.location_range is None:
+            return np.inf
+        return max(self.location_range) - min(self.location_range)
+
+    def get_duration(self):
+        """The time delta between the two cluster edges. `numpy.inf` if undefined.
+
+        :rtype: numpy.timedelta64
+        """
+        if self.time_range is None:
+            return float("inf")
+        return max(self.time_range) - max(self.time_range)
+
     # Wordt opgeroepen als je `str(een_cluster)` of bv. `print(een_cluster)` schrijft.
     def __str__(self):
         sentences = []
@@ -21,6 +41,9 @@ class Cluster:
         if self.time_range is not None:
             sentences.append("{0} until {1}".format(*self.time_range))
         return "; ".join(sentences)
+
+    def __repr__(self):
+        return str(self)
 
     def __lt__(self, other):
         if self.time_range is None and other.time_range is None:
@@ -42,3 +65,4 @@ class Cluster:
 
     def __hash__(self):
         return hash(self.location_range) + hash(self.time_range)
+
