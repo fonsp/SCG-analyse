@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from functools import total_ordering
 import numpy as np
 
