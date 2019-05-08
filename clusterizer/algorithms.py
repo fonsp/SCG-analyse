@@ -127,6 +127,7 @@ def cluster_boolean_series(series, max_consecutive_false=5, min_length=5, min_co
         clusters.add((cluster_start, cluster_end))
     return clusters
 
+
 def clusterize_density(file,probability=0.01,placeint=10,timeint=7*24*60):
     """Algorithm finding two-dimensional clusters based on differences in density. It uses the following parameters:
 
@@ -300,3 +301,4 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]]) 
         clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime)))
     return(clusters2)
+
