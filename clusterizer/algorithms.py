@@ -1,8 +1,9 @@
 import numpy as np
 import scipy.stats
-
+import functools
 from clusterizer.cluster import Cluster
 from sklearn.cluster import DBSCAN
+
 
 def clusterize_poisson_1d(circuit, bin_size=4, weigh_charges=False, nominal_circuit_fraction=.80, certainty=.95, min_cluster_size=3, max_skipped_bins=2):
     """Identify clusters using the Poisson algorithm, as described in TODO
