@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+from . import cluster
 
 
 def axis_is_in_datetime_format(axis):
@@ -14,7 +15,7 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, d
     """Draw a location (x) vs time (y) scatter plot.
 
     :param circuit: Circuit object containing PD series to plot
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param ax: Axes to draw on. Defaults to `plt.gca()`
     :type ax: class:`matplotlib.axes.Axes`, optional
@@ -44,7 +45,7 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
     """Draw a histogram of PD locations.
 
     :param circuit: Circuit object containing PD series to plot
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param weigh_charges: When set to `True`, PD charges are accumulated. otherwise PD occurences are counted.
     :type weigh_charges: bool, optional
@@ -78,7 +79,7 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     """Draw colored lines for every warning in the circuit. Useful when the same axis was used to draw a location time scatter plot.
 
     :param circuit: Circuit object containing warning series to plot
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param ax: Axes to draw on. Defaults to `plt.gca()`
     :type ax: class:`matplotlib.axes.Axes`, optional
@@ -92,30 +93,21 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
+    if circuit.warning is None or circuit.warning.empty or len(circuit.warning) == 0:
+        return
     if ax is None:
         ax = plt.gca()
-
-    # TODO: warn user when overlaying an empty plot
-    show_date = axis_is_in_datetime_format(ax.yaxis)
-
-    if line_width is None:
-        line_width = circuit.circuitlength * 0.01
 
     warningcolors = {'1': 'yellow', '2': 'orange', '3': 'red', 'N': 'green'}
     colors_added_to_legend = set()
     for i, w in circuit.warning.sort_values(by=['SCG warning level (1 to 3 or Noise)']).iterrows():
-        loc = w["Location in meters (m)"]
-        dates = [w["Start Date/time (UTC)"], w["End Date/time (UTC)"]]
         # Using str key in dict instead of int to support 'Noise' warning
         level = str(w["SCG warning level (1 to 3 or Noise)"])
         label = "Warning " + level if (level not in colors_added_to_legend and add_to_legend) else None
         colors_added_to_legend.add(level)
-        if show_date:
-            # Draw a single line
-            ax.plot([loc, loc], dates, linewidth=line_width, c=warningcolors[level], alpha=opacity, solid_capstyle="butt", label=label)
-        else:
-            # Draw a complete vertical line
-            ax.axvline(loc, linewidth=line_width, c=warningcolors[level], alpha=opacity, solid_capstyle="butt", label=label)
+
+        cluster_created_from_warning = cluster.Cluster.from_circuit_warning(circuit, i, cluster_width=line_width)
+        overlay_cluster(cluster_created_from_warning, ax=ax, color=warningcolors[level], opacity=opacity, label=label)
 
 
 def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.3):
@@ -204,6 +196,6 @@ def overlay_boolean_series(values, loc=None, ax=None, y1=None, y2=None, color='y
         loc = np.linspace(xmin, xmax, num=len(values))
 
     ax.fill_between(loc, y1=y_lower, y2=y_upper, where=values, color=color, alpha=opacity, label=label)
-
+    print("huh")
     # Omdat het gekleurde gebied misschien doorloopt tot de boven- en onderkanten van het plotgebied, wordt het plotgebied door matplotlib automatisch vergroot om dit te laten passen. Dit doen we ongedaan:
     ax.set_ylim(ymin, ymax)
