@@ -48,7 +48,13 @@ def clusterize_poisson_1d(circuit, bin_size=4, weigh_charges=False, nominal_circ
     # See: https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
 
     bins = np.arange(start=0., stop=circuit.circuitlength+bin_size, step=bin_size)
-    bin_contents, _ = np.histogram(locations, bins=bins, weights=charges if weigh_charges else None)
+    # NP.HISTOGRAM bin_contents, _ = np.histogram(locations, bins=bins, weights=charges if weigh_charges else None)
+    bin_contents = faster_histogram_1d(locations,
+                                       bins_start=0.0,
+                                       bin_width=bin_size,
+                                       num_bins=int(circuit.circuitlength / bin_size)+1,
+                                       weights=charges if weigh_charges else None,
+                                       check_inside_bounds=False)
 
     # %% Find the 80% quantile: find the (lowest) value M such that at least 80% of bins have a content <= M.
     nominal_pd_quantile_level = np.sort(bin_contents)[int(nominal_circuit_fraction * len(bin_contents))] + 1
@@ -82,11 +88,19 @@ def clusterize_poisson_1d(circuit, bin_size=4, weigh_charges=False, nominal_circ
 def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit_fraction=.80, certainty=.95, min_cluster_size=3, max_skipped_bins=2, time_bin_size=np.timedelta64(7, 'D'), magic_factor=10):
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
+    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
     times = np.float64(times)
     time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Apply the 1D algorithm
-    loc_clusters, bins, bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(circuit, bin_size=bin_size, weigh_charges=weigh_charges, nominal_circuit_fraction=nominal_circuit_fraction, certainty=certainty, min_cluster_size=min_cluster_size, max_skipped_bins=max_skipped_bins)
+    loc_clusters, bins, bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(
+            circuit,
+            bin_size=bin_size,
+            weigh_charges=weigh_charges,
+            nominal_circuit_fraction=nominal_circuit_fraction,
+            certainty=certainty,
+            min_cluster_size=min_cluster_size,
+            max_skipped_bins=max_skipped_bins)
 
     # %% Find _nusters_
     is_below_quantile = bin_contents < nominal_pd_quantile_level
@@ -116,27 +130,44 @@ def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit
     # PD with index i is contained in one of the nusters
 
     times_in_nuster = times[in_a_nuster]
+    if weigh_charges:
+        charges_in_nuster = charges[in_a_nuster]
 
     # %% Discretize PD counts (only those PDs that lie inside a nuster) in second dimension
     # NP.HISTOGRAM: time_bins = np.arange(min(times), max(times) + time_bin_size, time_bin_size)
     # NP.HISTOGRAM: nuster_counts, _ = np.histogram(times_in_nuster, bins=time_bins)
-    nuster_counts = faster_histogram_1d(times_in_nuster, bins_start=min(times), bin_width=time_bin_size, num_bins=int((max(times) - min(times))/time_bin_size)+1, ignore_outside_bounds=False)
+    nuster_counts = faster_histogram_1d(times_in_nuster,
+                                        bins_start=min(times),
+                                        bin_width=time_bin_size,
+                                        num_bins=int((max(times) - min(times))/time_bin_size)+1,
+                                        weights=charges_in_nuster if weigh_charges else None,
+                                        check_inside_bounds=False)
 
     # %% Discretize in second dimension
     found_2d_clusters = set()
 
     for loc_cluster in loc_clusters:
+        in_current_loc_cluster = which_pds_inside_location_range(loc_cluster.location_range)
+        times_in_loc_cluster = times[in_current_loc_cluster]
+        if weigh_charges:
+            charges_in_loc_cluster = charges[in_current_loc_cluster]
         # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_cluster.location_range)], bins=time_bins)
-        clust_counts = faster_histogram_1d(times[which_pds_inside_location_range(loc_cluster.location_range)], bins_start=min(times), bin_width=time_bin_size, num_bins=int((max(times) - min(times))/time_bin_size)+1, ignore_outside_bounds=False)
+        clust_counts = faster_histogram_1d(times_in_loc_cluster,
+                                           bins_start=min(times),
+                                           bin_width=time_bin_size,
+                                           num_bins=int((max(times) - min(times))/time_bin_size) + 1,
+                                           weights=charges_in_loc_cluster if weigh_charges else None,
+                                           check_inside_bounds=False)
 
         # We study the ratio of PDs
         cluster_length = loc_cluster.get_width()
         nominal_ratio = cluster_length / total_nusters_length
 
-        found_ratio = clust_counts / nuster_counts
+        with np.errstate(invalid="ignore"):
+            found_ratio = clust_counts / nuster_counts
         found_ratio[np.isnan(found_ratio)] = 0.0
 
-        is_suspiciously_high_ratio = clust_counts / nuster_counts > magic_factor * nominal_ratio
+        is_suspiciously_high_ratio = found_ratio > magic_factor * nominal_ratio
 
         for start_index, end_index in cluster_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=1, min_length=0, min_count=2):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
@@ -147,7 +178,7 @@ def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit
     return found_2d_clusters
 
 
-def faster_histogram_1d(a, bins_start, bin_width, num_bins, ignore_outside_bounds=True):
+def faster_histogram_1d(a, bins_start, bin_width, num_bins, weights=None, check_inside_bounds=True):
     """When bin sizes are constant, this method is about 3x faster than `np.histogram`.
     It uses fast float -> integer casting to calculate the bin index of a value.
     Even greater speedups can be achieved. For example, using C bindings is claimed to be 8x faster than `np.histogram`.
@@ -158,21 +189,27 @@ def faster_histogram_1d(a, bins_start, bin_width, num_bins, ignore_outside_bound
     :param bins_start: The left edge of the first bin
     :type bins_start: float
 
-    :param bin_width: Bin width
+    :param bin_width: Bin width. Constant for all bins (if not, use `np.histogram` instead)
     :type bin_width: float
 
     :param num_bins: Number of bins
     :type num_bins: int
 
-    :param ignore_outside_bounds: When True (default), the function first checks whether each value is contained in any of the bins. Values outside bounds `[bins_start ... bins_start + num_bins * bin_width]` are then ignored (not counted). Set to False when it is guaranteed that all values of `a` lie within the bounds, to skip the check for an additional speed-up.
+    :param weights: Weights. Must have the same length as `a`
+    :type weights: array_like
+
+    :param check_inside_bounds: When True (default), the function first checks whether each value is contained in any of the bins. Values outside bounds `[bins_start ... bins_start + num_bins * bin_width]` are then ignored (not counted). Set to False when it is guaranteed that all values of `a` lie within the bounds, to skip the check for an additional speed-up.
     """
-    if ignore_outside_bounds:
-        a_inside = a
+    if check_inside_bounds:
+        inside = np.logical_and(bins_start < a, a < bins_start + (num_bins) * bin_width)
+        a_inside = a[inside]
+        weights_inside = None if weights is None else weights[inside]
     else:
-        a_inside = a[np.logical_and(bins_start < a, a < bins_start + (num_bins) * bin_width)]
+        a_inside = a
+        weights_inside = weights
 
     bin_indices = ((a_inside - bins_start) * (1.0 / bin_width)).astype(np.int64)
-    return np.bincount(bin_indices, minlength=num_bins)
+    return np.bincount(bin_indices, weights=weights_inside, minlength=num_bins)
 
 
 def cluster_boolean_series(series, max_consecutive_false=5, min_length=5, min_count=0):
