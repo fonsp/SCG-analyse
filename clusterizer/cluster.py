@@ -14,6 +14,29 @@ class Cluster:
         self.location_range = location_range
         self.time_range = time_range
 
+    def from_circuit_warning(circuit, warning_index, cluster_width=None):
+        """
+        Create a new Cluster instance that corresponds to one of the (DNV-GL) warnings of the MergedCircuit. `warning_index` chooses which warning to convert from. (A MergedCircuit has multiple warnings, in general.)
+
+        :param circuit: Circuit object containing warning series to convert from
+        :type circuit: class:`clusterizer.circuit.MergedCircuit`
+
+        :param warning_index: The index of the warning to convert from
+        :type warning_index: int
+
+        :param cluster_width: Width (m) of the Cluster to create. When set to `None`, 1% of the circuit length is used (0.5% at both sides).
+        :type cluster_width: float, optional
+        """
+        w = circuit.warning.loc[warning_index]
+        loc = w["Location in meters (m)"]
+        dates = (w["Start Date/time (UTC)"], w["End Date/time (UTC)"])
+        if cluster_width is None:
+            cluster_width = circuit.circuitlength * 0.01
+
+        loc_range = (loc - cluster_width * .5, loc + cluster_width * .5)
+
+        return Cluster(location_range=loc_range, time_range=dates)
+
     def get_width(self):
         """The distance in m between the two cluster edges. `numpy.inf` if undefined.
 
@@ -64,7 +87,7 @@ class Cluster:
 
     def __hash__(self):
         return hash(self.location_range) + hash(self.time_range)
-    
+
     def __and__(self, other):
         """
         Calculate the overlap between this cluster and another cluster
@@ -123,10 +146,10 @@ class WeightedCluster:
         """
         self.cluster = cluster
         self.weight = weight
-        
+
     def __str__(self):
         return str(self.cluster) + ": Weight " + str(self.weight)
-    
+
     def __repr__(self):
         return str(self)
 
@@ -151,7 +174,7 @@ class WeightedCluster:
 
     def __or__(self, other):
         return WeightedCluster(self.cluster | other.cluster, weight=min(self.weight, other.weight))
-    
+
     def __ror__(self, other):
         return self.__or__(other)
 
@@ -159,13 +182,13 @@ class WeightedCluster:
 class WeightedClusterSet:
     def __init__(self, wcs):
         self.weighted_cluster_set = set(wcs)
-        
+
     def __str__(self):
         result = ""
         for cluster in sorted(self.weighted_cluster_set):
             result += str(cluster) + "\n"
         return result
-    
+
     def __repr__(self):
         return str(self)
 
@@ -174,9 +197,9 @@ class WeightedClusterSet:
         for cluster in self.weighted_cluster_set:
             hashed += hash(cluster)
         return hashed
-    
+
     def as_set(self):
         return self.weighted_cluster_set
-    
+
     def as_list(self):
         return list(self.weighted_cluster_set)
