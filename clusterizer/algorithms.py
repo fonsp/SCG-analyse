@@ -79,11 +79,12 @@ def clusterize_poisson_1d(circuit, bin_size=4, weigh_charges=False, nominal_circ
     return clusters, bins, bin_contents, nominal_pd_quantile_level, rate
 
 
-def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit_fraction=.80, certainty=.95, min_cluster_size=3, max_skipped_bins=2, time_bin_size=np.timedelta64('7', 'D'), magic_ratio=10):
-    # TODO: The magic ratio should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
+def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit_fraction=.80, certainty=.95, min_cluster_size=3, max_skipped_bins=2, time_bin_size=np.timedelta64(7, 'D'), magic_factor=10):
+    # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-
+    times = np.float64(times)
+    time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Apply the 1D algorithm
     loc_clusters, bins, bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(circuit, bin_size=bin_size, weigh_charges=weigh_charges, nominal_circuit_fraction=nominal_circuit_fraction, certainty=certainty, min_cluster_size=min_cluster_size, max_skipped_bins=max_skipped_bins)
 
@@ -92,13 +93,22 @@ def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit
 
     # We group is boolean series to find the _nusters_: ranges of circuit that show nominal PD behaviour.
     below_quantile_groups = cluster_boolean_series(is_below_quantile)
-    not_cluster_ranges = [np.array(g)*bin_size for g in below_quantile_groups]
+    nuster_ranges = [np.array(g)*bin_size for g in below_quantile_groups]
+
+    total_nusters_length = sum(b - a for a, b in nuster_ranges)
+
+    # %% Did we find enough nusters to continue?
+    # (Although we suspect that this situation is actually impossible)
+    if total_nusters_length < circuit.circuitlength * 0.1:
+        print("2D poisson model failed on Circuit {0}: there are not enough line segments with nominal PD behaviour. 1D clusters will be returned.".format(circuit.circuitnr))
+        return loc_clusters
 
     # %% For each PD, determine whether it lies in one of the nusters
+
     def which_pds_inside_location_range(location_range):
         return np.logical_and(location_range[0] < locations.values, locations.values < location_range[1])
 
-    in_a_nuster = functools.reduce(np.logical_or, map(which_pds_inside_location_range, not_cluster_ranges))
+    in_a_nuster = functools.reduce(np.logical_or, map(which_pds_inside_location_range, nuster_ranges))
     # in_a_nuster is an np.array with boolean values, the length of which is the number of PDs.
 
     # in_a_nuster[i] == True
@@ -108,27 +118,61 @@ def clusterize_poisson(circuit, bin_size=4, weigh_charges=False, nominal_circuit
     times_in_nuster = times[in_a_nuster]
 
     # %% Discretize PD counts (only those PDs that lie inside a nuster) in second dimension
-    time_bins = np.arange(min(times), max(times) + time_bin_size, time_bin_size)
-    nuster_counts, _ = np.histogram(times_in_nuster, bins=time_bins)
+    # NP.HISTOGRAM: time_bins = np.arange(min(times), max(times) + time_bin_size, time_bin_size)
+    # NP.HISTOGRAM: nuster_counts, _ = np.histogram(times_in_nuster, bins=time_bins)
+    nuster_counts = faster_histogram_1d(times_in_nuster, bins_start=min(times), bin_width=time_bin_size, num_bins=int((max(times) - min(times))/time_bin_size)+1, ignore_outside_bounds=False)
 
     # %% Discretize in second dimension
     found_2d_clusters = set()
 
-    total_nusters_length = sum(b - a for a, b in not_cluster_ranges)
-
     for loc_cluster in loc_clusters:
-        clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_cluster.location_range)], bins=time_bins)
+        # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_cluster.location_range)], bins=time_bins)
+        clust_counts = faster_histogram_1d(times[which_pds_inside_location_range(loc_cluster.location_range)], bins_start=min(times), bin_width=time_bin_size, num_bins=int((max(times) - min(times))/time_bin_size)+1, ignore_outside_bounds=False)
+
+        # We study the ratio of PDs
         cluster_length = loc_cluster.get_width()
         nominal_ratio = cluster_length / total_nusters_length
 
-        is_suspiciously_high_ratio = clust_counts / nuster_counts / nominal_ratio > magic_ratio
+        found_ratio = clust_counts / nuster_counts
+        found_ratio[np.isnan(found_ratio)] = 0.0
+
+        is_suspiciously_high_ratio = clust_counts / nuster_counts > magic_factor * nominal_ratio
 
         for start_index, end_index in cluster_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=1, min_length=0, min_count=2):
-            time_range = (time_bins[start_index], time_bins[end_index])
-            cluster = Cluster(location_range=loc_cluster.location_range, time_range=time_range)
+            # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
+            time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
+            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range))
             found_2d_clusters.add(cluster)
 
     return found_2d_clusters
+
+
+def faster_histogram_1d(a, bins_start, bin_width, num_bins, ignore_outside_bounds=True):
+    """When bin sizes are constant, this method is about 3x faster than `np.histogram`.
+    It uses fast float -> integer casting to calculate the bin index of a value.
+    Even greater speedups can be achieved. For example, using C bindings is claimed to be 8x faster than `np.histogram`.
+
+    :param a: Input data
+    :type a: array_like
+
+    :param bins_start: The left edge of the first bin
+    :type bins_start: float
+
+    :param bin_width: Bin width
+    :type bin_width: float
+
+    :param num_bins: Number of bins
+    :type num_bins: int
+
+    :param ignore_outside_bounds: When True (default), the function first checks whether each value is contained in any of the bins. Values outside bounds `[bins_start ... bins_start + num_bins * bin_width]` are then ignored (not counted). Set to False when it is guaranteed that all values of `a` lie within the bounds, to skip the check for an additional speed-up.
+    """
+    if ignore_outside_bounds:
+        a_inside = a
+    else:
+        a_inside = a[np.logical_and(bins_start < a, a < bins_start + (num_bins) * bin_width)]
+
+    bin_indices = ((a_inside - bins_start) * (1.0 / bin_width)).astype(np.int64)
+    return np.bincount(bin_indices, minlength=num_bins)
 
 
 def cluster_boolean_series(series, max_consecutive_false=5, min_length=5, min_count=0):
