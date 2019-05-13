@@ -3,7 +3,7 @@ import numpy as np
 
 @total_ordering
 class Cluster:
-    def __init__(self, location_range=None, time_range=None):
+    def __init__(self, location_range=None, time_range=None, found_by=None):
         """
         :param location_range: (Optional) 2-Tuple containing left and right cluster bounds
         :type location_range: tuple (float)
@@ -13,6 +13,10 @@ class Cluster:
         """
         self.location_range = location_range
         self.time_range = time_range
+        if found_by is None:
+            self.found_by = set()
+        else:
+            self.found_by = found_by
 
     def get_width(self):
         """The distance in m between the two cluster edges. `numpy.inf` if undefined.
@@ -82,7 +86,7 @@ class Cluster:
 
         if other is None:
             return None
-        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range))
+        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range), self.found_by & other.found_by)
         if overlap_cluster.location_range is None and overlap_cluster.time_range is None:
             return None
         return overlap_cluster
@@ -92,6 +96,9 @@ class Cluster:
         Right and. Needed to make things like 'None & Cluster' work
         """
         return self.__and__(other)
+
+    def overlap(self, other):
+        return self & other
 
     def __or__(self, other):
         """
@@ -105,78 +112,88 @@ class Cluster:
             return None
         if other is None:
             return None
-        return Cluster(least_common_superrange(self.location_range, other.location_range), least_common_superrange(self.time_range, other.time_range))
+        return Cluster(least_common_superrange(self.location_range, other.location_range), least_common_superrange(self.time_range, other.time_range), self.found_by | other.found_by)
 
     def __ror__(self, other):
         return self.__or__(other)
 
-
-@total_ordering
-class WeightedCluster:
-    def __init__(self, cluster, weight=1):
-        """
-        :param cluster: Cluster object
-        :type cluster: class: `clusterizer.cluster.Cluster`
-
-        :param weight: The weight of the cluster, standard is 1
-        :type weight: integer, optional
-        """
-        self.cluster = cluster
-        self.weight = weight
-        
-    def __str__(self):
-        return str(self.cluster) + ": Weight " + str(self.weight)
-    
-    def __repr__(self):
-        return str(self)
-
-    def __lt__(self, other):
-        if self.cluster < other.cluster:
+    def disjunct(self, other):
+        # return (self & other) is None
+        def disjunct_range(first, second):
+            if first is not None and second is not None:
+                return first[1] <= second[0] or second[1] <= first[0]
+            return False
+        if other is None:
             return True
-        if self.cluster == other.cluster and self.weight < other.weight:
-            return True
-        return False
+        return disjunct_range(self.location_range, other.location_range) or disjunct_range(self.time_range, other.time_range)
 
-    def __eq__(self, other):
-        return self.cluster == other.cluster and self.weight == other.weight
+    def supercluster(self, other):
+        return self | other
 
-    def __hash__(self):
-        return self.weight * hash(self.cluster)
-
-    def __and__(self, other):
-        return WeightedCluster(self.cluster & other.cluster, weight=self.weight + other.weight)
-
-    def __rand__(self, other):
-        return self.__and__(other)
-
-    def __or__(self, other):
-        return WeightedCluster(self.cluster | other.cluster, weight=min(self.weight, other.weight))
-    
-    def __ror__(self, other):
-        return self.__or__(other)
-
-
-class WeightedClusterSet:
-    def __init__(self, wcs):
-        self.weighted_cluster_set = set(wcs)
-        
-    def __str__(self):
-        result = ""
-        for cluster in sorted(self.weighted_cluster_set):
-            result += str(cluster) + "\n"
+    def __sub__(self, other):
+        """
+        Calculate self without other (set theoretic: self\other)
+        Returns a Set containing Clusters
+        """
+        def empty_range(r):
+            if r is None:
+                return False
+            return r[0] == r[1]
+        def empty_cluster(cluster):
+            if cluster is None:
+                return True
+            if empty_range(cluster.location_range) or empty_range(cluster.time_range):
+                return True
+            return False
+        if self.disjunct(other):
+            return set([self])
+        overlap = self & other
+        left_locations = (self.location_range[0], overlap.location_range[0])
+        middle_locations = overlap.location_range
+        right_locations = (overlap.location_range[1], self.location_range[1])
+        if self.time_range is not None and overlap.time_range is not None:
+            lower_times = (self.time_range[0], overlap.time_range[0])
+            middle_times = overlap.time_range
+            upper_times = (overlap.time_range[1], self.time_range[1])
+        else:
+            lower_times, middle_times, upper_times = self.time_range, self.time_range, self.time_range
+        lu = Cluster(left_locations, upper_times, found_by=self.found_by)
+        mu = Cluster(middle_locations, upper_times, found_by=self.found_by)
+        ru = Cluster(right_locations, upper_times, found_by=self.found_by)
+        lm = Cluster(left_locations, middle_times, found_by=self.found_by)
+        rm = Cluster(right_locations, middle_times, found_by=self.found_by)
+        ll = Cluster(left_locations, lower_times, found_by=self.found_by)
+        ml = Cluster(middle_locations, lower_times, found_by=self.found_by)
+        rl = Cluster(right_locations, lower_times, found_by=self.found_by)
+        mini_clusters = [lu, mu, ru, lm, rm, ll, ml, rl]
+        result = set()
+        for c in mini_clusters:
+            if not empty_cluster(c):
+                result.add(c)
         return result
-    
-    def __repr__(self):
-        return str(self)
 
-    def __hash__(self):
-        hashed = 0
-        for cluster in self.weighted_cluster_set:
-            hashed += hash(cluster)
-        return hashed
-    
-    def as_set(self):
-        return self.weighted_cluster_set
-    
-    def as_list(self):
-        return list(self.weighted_cluster_set)
+    def __add__(self, other):
+        if other is None:
+            return set([self])
+        if self.disjunct(other):
+            return set([self, other])
+        overlap = self & other
+        smo = self - other
+        oms = other - self
+        return set([overlap]) | smo | oms
+
+    def __mul__(self, other):
+        return self & other
+
+    def get_partial_discharges(self, circuit):
+        def in_range(r, x):
+            if r is None:
+                return True
+            return r[0] <= x <= r[1]
+        partial_discharges = circuit.pd[circuit.pd_occured]
+        times = partial_discharges["Date/time (UTC)"]
+        locations = partial_discharges["Location in meters (m)"]
+        location_bools = [in_range(self.location_range, loc) for loc in locations]
+        time_bools = [in_range(self.time_range, time) for time in times]
+        return partial_discharges[np.logical_and(location_bools, time_bools)]
+
