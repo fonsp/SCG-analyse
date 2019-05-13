@@ -18,6 +18,29 @@ class Cluster:
         else:
             self.found_by = found_by
 
+    def from_circuit_warning(circuit, warning_index, cluster_width=None):
+        """
+        Create a new Cluster instance that corresponds to one of the (DNV-GL) warnings of the MergedCircuit. `warning_index` chooses which warning to convert from. (A MergedCircuit has multiple warnings, in general.)
+
+        :param circuit: Circuit object containing warning series to convert from
+        :type circuit: class:`clusterizer.circuit.MergedCircuit`
+
+        :param warning_index: The index of the warning to convert from
+        :type warning_index: int
+
+        :param cluster_width: Width (m) of the Cluster to create. When set to `None`, 1% of the circuit length is used (0.5% at both sides).
+        :type cluster_width: float, optional
+        """
+        w = circuit.warning.loc[warning_index]
+        loc = w["Location in meters (m)"]
+        dates = (w["Start Date/time (UTC)"], w["End Date/time (UTC)"])
+        if cluster_width is None:
+            cluster_width = circuit.circuitlength * 0.01
+
+        loc_range = (loc - cluster_width * .5, loc + cluster_width * .5)
+
+        return Cluster(location_range=loc_range, time_range=dates)
+
     def get_width(self):
         """The distance in m between the two cluster edges. `numpy.inf` if undefined.
 
@@ -68,7 +91,7 @@ class Cluster:
 
     def __hash__(self):
         return hash(self.location_range) + hash(self.time_range)
-    
+
     def __and__(self, other):
         """
         Calculate the overlap between this cluster and another cluster
@@ -126,6 +149,7 @@ class Cluster:
         if other is None:
             return True
         return disjunct_range(self.location_range, other.location_range) or disjunct_range(self.time_range, other.time_range)
+
 
     def supercluster(self, other):
         return self | other
