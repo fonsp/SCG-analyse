@@ -14,7 +14,7 @@ class ClusterSet:
 
     def __str__(self):
         result = "{"
-        for cluster in sorted(self.clusters):
+        for cluster in self.clusters:
             result += str(cluster) + "\n"
         return result[:-1] + "}"
 
@@ -40,8 +40,7 @@ class ClusterSet:
         return list(self.clusters)
 
     def disjunct(self, other):
-        overlap = self & other
-        return not bool(overlap)
+        return not bool(self & other)
 
     def __and__(self, other):
         result = set()
@@ -58,16 +57,17 @@ class ClusterSet:
     def __add__(self, other):
         if self.disjunct(other):
             return ClusterSet(self.clusters | other.clusters)
+        result = ClusterSet(self.clusters)
         while other:
             othercur = other.clusters.pop()
-            for selfcur in self:
-                if not othercur.disjunct(selfcur):
-                    other.clusters |= othercur + selfcur
-                    self.clusters.remove(selfcur)
+            for clust in result:
+                if not othercur.disjunct(clust):
+                    other.clusters |= othercur + clust
+                    result.clusters.remove(clust)
                     break
             else:
-                self.clusters.add(othercur)
-        return self
+                result.clusters.add(othercur)
+        return result
 
     def get_partial_discharges(self, circuit):
         partial_discharges = None
@@ -113,10 +113,18 @@ class ClusterEnsemble:
     def __iter__(self):
         return self.sets.__iter__()
 
+    def __bool__(self):
+        return bool(self.sets)
+
+    def __len__(self):
+        return len(self.sets)
+
     def get_clusters(self):
         result = set()
         for s in self.sets:
-            pass
+            for clust in s:
+                result.add(clust)
+        return result
 
     def flatten(self):
         result = set()
@@ -130,5 +138,29 @@ class ClusterEnsemble:
     def as_list(self):
         return list(self.sets)
 
+    def disjunct(self, other):
+        return not bool(self & other)
+
+    def __and__(self, other):
+        result = set()
+        for cs1 in self:
+            for cs2 in other:
+                overlap = cs1 & cs2
+                if overlap:
+                    result.add(overlap)
+        return result
+
     def __add__(self, other):
-        pass
+        if self.disjunct(other):
+            return ClusterEnsemble(self.sets | other.sets)
+        result = ClusterEnsemble(self.sets)
+        while other:
+            othercur = other.sets.pop()
+            for rcur in result:
+                if not othercur.disjunct(rcur):
+                    other.sets.add(othercur + rcur)
+                    result.sets.remove(rcur)
+                    break
+            else:
+                result.sets.add(othercur)
+        return result
