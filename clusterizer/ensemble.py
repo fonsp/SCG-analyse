@@ -14,8 +14,8 @@ class ClusterSet:
 
     def __str__(self):
         result = "{"
-        for cluster in self.clusters:
-            result += str(cluster) + "\n"
+        for c in self.clusters:
+            result += str(c) + "\n"
         return result[:-1] + "}"
 
     def __repr__(self):
@@ -71,12 +71,13 @@ class ClusterSet:
 
     def get_partial_discharges(self, circuit):
         partial_discharges = None
-        for cluster in self.clusters:
+        for c in self.clusters:
             if partial_discharges is None:
-                partial_discharges = cluster.get_partial_discharges(circuit)
+                partial_discharges = c.get_partial_discharges(circuit)
             else:
-                partial_discharges = pd.concat([partial_discharges, cluster.get_partial_discharges(circuit)], ignore_index=True)
+                partial_discharges = pd.concat([partial_discharges, c.get_partial_discharges(circuit)], ignore_index=True)
         return partial_discharges
+
 
 class ClusterEnsemble:
     """
@@ -85,6 +86,7 @@ class ClusterEnsemble:
     Each set in the ensemble represents a cluster of arbitrary shape
     The Cluster objects in each ClusterSet are 'rectangels' which combine to make a cluster
     """
+
     def __init__(self, sets):
         self.sets = set(sets)
 
@@ -94,20 +96,20 @@ class ClusterEnsemble:
         for x in cluster_iterable:
             ensemble.add(ClusterSet([x]))
         return ClusterEnsemble(ensemble)
-        
+
     def __str__(self):
         result = "{"
-        for cluster in self:
-            result += str(cluster) + "\n"
+        for c in self:
+            result += str(c) + "\n"
         return result[:-1] + "}"
-    
+
     def __repr__(self):
         return str(self)
 
     def __hash__(self):
         hashed = 0
-        for cluster in self.sets:
-            hashed += hash(cluster)
+        for c in self.sets:
+            hashed += hash(c)
         return hashed
 
     def __iter__(self):
@@ -131,10 +133,10 @@ class ClusterEnsemble:
         for clusterset in self:
             result |= clusterset.as_set()
         return ClusterEnsemble([ClusterSet(result)])
-    
+
     def as_set(self):
         return self.sets
-    
+
     def as_list(self):
         return list(self.sets)
 
