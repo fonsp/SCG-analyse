@@ -1,4 +1,5 @@
 from functools import total_ordering
+import functools
 import numpy as np
 
 
@@ -216,13 +217,16 @@ class Cluster:
         return self & other
 
     def get_partial_discharges(self, circuit):
-        def in_range(r, x):
-            if r is None:
-                return True
-            return r[0] <= x <= r[1]
-        partial_discharges = circuit.pd[circuit.pd_occured]
-        times = partial_discharges["Date/time (UTC)"]
-        locations = partial_discharges["Location in meters (m)"]
-        location_bools = [in_range(self.location_range, loc) for loc in locations]
-        time_bools = [in_range(self.time_range, time) for time in times]
-        return partial_discharges[np.logical_and(location_bools, time_bools)]
+        """Returns all PDs that lie in the Cluster."""
+        return circuit.pd[circuit.pd_occured].loc[self.get_partial_discharge_mask(circuit)]
+
+    def get_partial_discharge_mask(self, circuit):
+        """Returns a boolean array which indicates, for each PD, whether it lies in the Cluster."""
+        locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
+        times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+
+        return functools.reduce(np.logical_and, [
+            self.location_range[0] < locations,
+            self.location_range[1] >= locations,
+            self.time_range[0] < times,
+            self.time_range[1] >= times])
