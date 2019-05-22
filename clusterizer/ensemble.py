@@ -54,19 +54,36 @@ class ClusterSet:
     def __mul__(self, other):
         return self & other
 
+    def __or__(self, other):
+        if self.disjunct(other):
+            return ClusterSet(self.clusters | other.clusters)
+        result = ClusterSet(self.clusters)
+        helper = ClusterSet(other.clusters)
+        while helper:
+            helpercur = helper.clusters.pop()
+            for clust in result:
+                if not helpercur.disjunct(clust):
+                    helper.clusters.add(helpercur | clust)
+                    result.clusters.remove(clust)
+                    break
+            else:
+                result.clusters.add(helpercur)
+        return result
+
     def __add__(self, other):
         if self.disjunct(other):
             return ClusterSet(self.clusters | other.clusters)
         result = ClusterSet(self.clusters)
-        while other:
-            othercur = other.clusters.pop()
+        helper = ClusterSet(other.clusters)
+        while helper:
+            helpercur = helper.clusters.pop()
             for clust in result:
-                if not othercur.disjunct(clust):
-                    other.clusters |= othercur + clust
+                if not helpercur.disjunct(clust):
+                    helper.clusters |= helpercur + clust
                     result.clusters.remove(clust)
                     break
             else:
-                result.clusters.add(othercur)
+                result.clusters.add(helpercur)
         return result
 
     def get_partial_discharges(self, circuit):
@@ -78,6 +95,16 @@ class ClusterSet:
                 partial_discharges = pd.concat([partial_discharges, c.get_partial_discharges(circuit)], ignore_index=True)
         return partial_discharges
 
+    def most_confident(self):
+        result = set()
+        confidence = 0
+        for cluster in self:
+            if len(cluster.found_by) > confidence:
+                result = set([cluster])
+                confidence = len(cluster.found_by)
+            elif len(cluster.found_by) == confidence:
+                result.add(cluster)
+        return ClusterSet(result)
 
 class ClusterEnsemble:
     """
@@ -152,17 +179,40 @@ class ClusterEnsemble:
                     result.add(overlap)
         return result
 
+    def __or__(self, other):
+        if self.disjunct(other):
+            return ClusterEnsemble(self.sets | other.sets)
+        result = ClusterEnsemble(self.sets)
+        helper = ClusterEnsemble(other.sets)
+        while helper:
+            helpercur = helper.sets.pop()
+            for rcur in result:
+                if not helpercur.disjunct(rcur):
+                    helper.sets.add(helpercur | rcur)
+                    result.sets.remove(rcur)
+                    break
+            else:
+                result.sets.add(helpercur)
+        return result
+
     def __add__(self, other):
         if self.disjunct(other):
             return ClusterEnsemble(self.sets | other.sets)
         result = ClusterEnsemble(self.sets)
-        while other:
-            othercur = other.sets.pop()
+        helper = ClusterEnsemble(other.sets)
+        while helper:
+            helpercur = helper.sets.pop()
             for rcur in result:
-                if not othercur.disjunct(rcur):
-                    other.sets.add(othercur + rcur)
+                if not helpercur.disjunct(rcur):
+                    helper.sets.add(helpercur + rcur)
                     result.sets.remove(rcur)
                     break
             else:
-                result.sets.add(othercur)
+                result.sets.add(helpercur)
         return result
+
+    def most_confident(self):
+        result = set()
+        for clusterset in self:
+            result.add(clusterset.most_confident())
+        return ClusterEnsemble(result)
