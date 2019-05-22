@@ -10,7 +10,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     """Identify location clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param certainty: After a model is fitted to nominal PD behaviour, line sections with bin counts that are _abnormally high, with given certainty_ are identified as "highly suspicious".
     :type certainty: float, optional
@@ -98,7 +98,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     """Identify clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param certainty: After a model is fitted to nominal PD behaviour, line sections with bin counts that are _abnormally high, with given certainty_ are identified as "highly suspicious". TODO
     :type certainty: float, optional
@@ -329,7 +329,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param binLengthX: Location bin width (m)
     :type binLengthX: float
@@ -417,9 +417,6 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
 
 
 def clusterize_ensemble(circuit, algorithms):
-    """
-
-    """
     result = ClusterEnsemble(set())
     if not algorithms:
         return result
@@ -434,7 +431,7 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, cluster_width=Non
     A clusterizer 'algorithm' that creates a Cluster for each warning given by DNV GL.
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param include_noise_warnings: When set to False, "Noise" warnings are skipped, and only level 1-3 warnings are converted.
     :type include_noise_warnings: bool, optional
