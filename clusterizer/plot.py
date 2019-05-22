@@ -221,6 +221,8 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_f
     :param label: A custom legend label, overrides default labeling
     :type label: str, optional
     """
+    if cluster is None:
+        return
     if ax is None:
         ax = plt.gca()
 
@@ -284,8 +286,12 @@ def overlay_boolean_series(values, loc=None, ax=None, y1=None, y2=None, color='y
     ax.set_ylim(ymin, ymax)
 
 
-def legend_without_duplicate_labels(ax):
+def legend_without_duplicate_labels(ax=None):
     """Same as `ax.legend()`, but ignores duplicate labels."""
+
+    if ax is None:
+        ax = plt.gca()
     handles, labels = ax.get_legend_handles_labels()
-    unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i]]
+    ct = lambda h: tuple(h.get_facecolor()[0])
+    unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i] or ct(h) not in map(ct, handles[:i])]
     ax.legend(*zip(*unique))
