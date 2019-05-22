@@ -1,6 +1,7 @@
 from functools import total_ordering
 import numpy as np
 
+
 @total_ordering
 class Cluster:
     def __init__(self, location_range=None, time_range=None, found_by=None):
@@ -16,8 +17,9 @@ class Cluster:
         if found_by is None:
             self.found_by = set()
         else:
-            self.found_by = found_by
+            self.found_by = set(found_by)
 
+    @staticmethod
     def from_circuit_warning(circuit, warning_index, cluster_width=None):
         """
         Create a new Cluster instance that corresponds to one of the (DNV-GL) warnings of the MergedCircuit. `warning_index` chooses which warning to convert from. (A MergedCircuit has multiple warnings, in general.)
@@ -34,12 +36,13 @@ class Cluster:
         w = circuit.warning.loc[warning_index]
         loc = w["Location in meters (m)"]
         dates = (w["Start Date/time (UTC)"], w["End Date/time (UTC)"])
+        level = str(w["SCG warning level (1 to 3 or Noise)"])
         if cluster_width is None:
             cluster_width = circuit.circuitlength * 0.01
 
         loc_range = (loc - cluster_width * .5, loc + cluster_width * .5)
 
-        return Cluster(location_range=loc_range, time_range=dates)
+        return Cluster(location_range=loc_range, time_range=dates, found_by={"DNV GL warning {}".format(level)})
 
     def get_width(self):
         """The distance in m between the two cluster edges. `numpy.inf` if undefined.
@@ -66,6 +69,8 @@ class Cluster:
             sentences.append("{0:.0f}m to {1:.0f}m".format(*self.location_range))
         if self.time_range is not None:
             sentences.append("{0} until {1}".format(*self.time_range))
+        if self.found_by:
+            sentences.append("Found by: " + ', '.join(['%s']*len(self.found_by)) % tuple(self.found_by))
         return "; ".join(sentences)
 
     def __repr__(self):
@@ -109,8 +114,8 @@ class Cluster:
 
         if other is None:
             return None
-        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range), self.found_by & other.found_by)
-        if overlap_cluster.location_range is None and overlap_cluster.time_range is None:
+        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range), self.found_by | other.found_by)
+        if overlap_cluster.location_range is None or overlap_cluster.time_range is None:
             return None
         return overlap_cluster
 
@@ -150,25 +155,26 @@ class Cluster:
             return True
         return disjunct_range(self.location_range, other.location_range) or disjunct_range(self.time_range, other.time_range)
 
-
     def supercluster(self, other):
         return self | other
 
     def __sub__(self, other):
         """
-        Calculate self without other (set theoretic: self\other)
+        Calculate self without other (set theoretic: self \\ other)
         Returns a Set containing Clusters
         """
         def empty_range(r):
             if r is None:
                 return False
             return r[0] == r[1]
+
         def empty_cluster(cluster):
             if cluster is None:
                 return True
             if empty_range(cluster.location_range) or empty_range(cluster.time_range):
                 return True
             return False
+
         if self.disjunct(other):
             return set([self])
         overlap = self & other
@@ -220,4 +226,3 @@ class Cluster:
         location_bools = [in_range(self.location_range, loc) for loc in locations]
         time_bools = [in_range(self.time_range, time) for time in times]
         return partial_discharges[np.logical_and(location_bools, time_bools)]
-

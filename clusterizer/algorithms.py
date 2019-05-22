@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats
 import functools
 from clusterizer.cluster import Cluster
+from clusterizer.ensemble import ClusterEnsemble
 from sklearn.cluster import DBSCAN
 
 
@@ -35,12 +36,12 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     :return: When return_intermediate_values is False, returns the found clusters.
     When return_intermediate_values is True, returns
     5-element tuple containing
-        (list of class:`clusterizer.cluster.Cluster`) found clusters;
+        (set of class:`clusterizer.cluster.Cluster`) found clusters;
         (np.ndarray) bin edges (including the right-most edge);
         (np.ndarray) bin counts;
         (float) the found 80% threshold of bin counts;
         (float) the rate parameter of the fitted Poisson model;
-    :rtype: list of class:`clusterizer.cluster.Cluster` or tuple
+    :rtype: set of class:`clusterizer.cluster.Cluster` or tuple
     """
     # TODO: the actual _certainty_ that a found cluster is abnormal is greater than 95%: it is the probability of finding _3 abnormal values, with at most 2 skipped values between them_. A lower bound would be
     # binomcdf(n=7, k=3, p=.05) = 0.999806421875
@@ -86,7 +87,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # It might be better to create a `clusterize_poisson_result` class containing all these intermediate values.
     # Similar to `OptimizeResult` in `scipy.optimize` (https://docs.scipy.org/doc/scipy/reference/optimize.html)
 
-    clusters = set(Cluster(location_range=tuple(loc_bin_size * np.array(c))) for c in cluster_edges)
+    clusters = set(Cluster(location_range=tuple(loc_bin_size * np.array(c)), found_by={"Poisson 1D"}) for c in cluster_edges)
 
     if return_intermediate_values:
         return clusters, bins, bin_contents, nominal_pd_quantile_level, rate
@@ -135,14 +136,14 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     :return: When return_intermediate_values is False, returns the found 2D clusters.
     When return_intermediate_values is True, returns
     7-element tuple containing
-        (list of class:`clusterizer.cluster.Cluster`) found 2D clusters;
-        (list of class:`clusterizer.cluster.Cluster`) found location clusters;
-        (list of class:`clusterizer.cluster.Cluster`) found nusters;
+        (set of class:`clusterizer.cluster.Cluster`) found 2D clusters;
+        (set of class:`clusterizer.cluster.Cluster`) found location clusters;
+        (set of class:`clusterizer.cluster.Cluster`) found nusters;
         (np.ndarray) bin edges (including the right-most edge);
         (np.ndarray) bin counts;
         (float) the found 80% threshold of bin counts;
         (float) the rate parameter of the fitted Poisson model;
-    :rtype: list of class:`clusterizer.cluster.Cluster` or tuple
+    :rtype: set of class:`clusterizer.cluster.Cluster` or tuple
     """
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
@@ -234,7 +235,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         for start_index, end_index in cluster_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
             time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
-            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range))
+            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range), found_by={"Poisson 2D"})
             found_2d_clusters.add(cluster)
 
     if return_intermediate_values:
@@ -346,7 +347,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     :type shave: float
 
     :return: found clusters
-    :rtype: list of class:`clusterizer.cluster.Cluster`
+    :rtype: set of class:`clusterizer.cluster.Cluster`
     """
 
     # loading data
@@ -411,5 +412,44 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
         endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
         beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
-        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime)))
+        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by={"DBSCAN"}))
     return(clusters2)
+
+
+def clusterize_ensemble(circuit, algorithms):
+    """
+
+    """
+    result = ClusterEnsemble(set())
+    if not algorithms:
+        return result
+    for alg in algorithms:
+        clusters = alg(circuit)
+        result += ClusterEnsemble.from_iterable(clusters)
+    return result
+
+
+def warnings_to_clusters(circuit, include_noise_warnings=True, cluster_width=None):
+    """
+    A clusterizer 'algorithm' that creates a Cluster for each warning given by DNV GL.
+
+    :param circuit: The circuit the clusterize.
+    :type circuit: class:`clusterizer.circuit.Circuit`
+
+    :param include_noise_warnings: When set to False, "Noise" warnings are skipped, and only level 1-3 warnings are converted.
+    :type include_noise_warnings: bool, optional
+
+    :param cluster_width: Width (m) of the Cluster to create. When set to `None`, 1% of the circuit length is used (0.5% at both sides).
+    :type cluster_width: float, optional
+    """
+    if circuit.warning is None or circuit.warning.empty or len(circuit.warning) == 0:
+        return set()
+
+    warning_clusters = set()
+    for i, w in circuit.warning.sort_values(by=['SCG warning level (1 to 3 or Noise)']).iterrows():
+        # Using str key in dict instead of int to support 'Noise' warning
+        level = str(w["SCG warning level (1 to 3 or Noise)"])
+
+        if include_noise_warnings or not level == "N":
+            warning_clusters.add(Cluster.from_circuit_warning(circuit, i, cluster_width=cluster_width))
+    return warning_clusters
