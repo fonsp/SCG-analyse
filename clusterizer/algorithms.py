@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats
 import functools
 from clusterizer.cluster import Cluster
+from clusterizer.ensemble import ClusterEnsemble
 from sklearn.cluster import DBSCAN
 
 
@@ -86,7 +87,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # It might be better to create a `clusterize_poisson_result` class containing all these intermediate values.
     # Similar to `OptimizeResult` in `scipy.optimize` (https://docs.scipy.org/doc/scipy/reference/optimize.html)
 
-    clusters = set(Cluster(location_range=tuple(loc_bin_size * np.array(c))) for c in cluster_edges)
+    clusters = set(Cluster(location_range=tuple(loc_bin_size * np.array(c)), found_by=["Poisson 1D"]) for c in cluster_edges)
 
     if return_intermediate_values:
         return clusters, bins, bin_contents, nominal_pd_quantile_level, rate
@@ -234,7 +235,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         for start_index, end_index in cluster_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
             time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
-            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range))
+            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range), found_by=["Poisson 2D"])
             found_2d_clusters.add(cluster)
 
     if return_intermediate_values:
@@ -411,5 +412,16 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
         endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
         beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
-        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime)))
+        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=["DBSCAN"]))
     return(clusters2)
+
+
+def clusterize_ensemble(circuit, algorithms):
+    result = ClusterEnsemble(set())
+    if not algorithms:
+        return result
+    for alg in algorithms:
+        clusters = alg(circuit)
+        result += ClusterEnsemble.from_iterable(clusters)
+    return result
+    
