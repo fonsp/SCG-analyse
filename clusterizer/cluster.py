@@ -16,7 +16,7 @@ class Cluster:
         if found_by is None:
             self.found_by = set()
         else:
-            self.found_by = found_by
+            self.found_by = set(found_by)
 
     def from_circuit_warning(circuit, warning_index, cluster_width=None):
         """
@@ -66,6 +66,8 @@ class Cluster:
             sentences.append("{0:.0f}m to {1:.0f}m".format(*self.location_range))
         if self.time_range is not None:
             sentences.append("{0} until {1}".format(*self.time_range))
+        if self.found_by:
+            sentences.append("Found by: " + ', '.join(['%s']*len(self.found_by)) % tuple(self.found_by))
         return "; ".join(sentences)
 
     def __repr__(self):
@@ -109,8 +111,8 @@ class Cluster:
 
         if other is None:
             return None
-        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range), self.found_by & other.found_by)
-        if overlap_cluster.location_range is None and overlap_cluster.time_range is None:
+        overlap_cluster = Cluster(overlap(self.location_range, other.location_range), overlap(self.time_range, other.time_range), self.found_by | other.found_by)
+        if overlap_cluster.location_range is None or overlap_cluster.time_range is None:
             return None
         return overlap_cluster
 
