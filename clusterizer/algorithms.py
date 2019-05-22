@@ -6,7 +6,7 @@ from clusterizer.ensemble import ClusterEnsemble
 from sklearn.cluster import DBSCAN
 
 
-def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circuit_fraction=.80, weigh_charges=False, min_bin_count=2, max_bins_skipped=2, return_intermediate_values=False):
+def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circuit_fraction=.80, weigh_charges=False, min_bin_count=2, max_bins_skipped=2, return_intermediate_values=False, name="Poisson 1D"):
     """Identify location clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
@@ -87,14 +87,14 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # It might be better to create a `clusterize_poisson_result` class containing all these intermediate values.
     # Similar to `OptimizeResult` in `scipy.optimize` (https://docs.scipy.org/doc/scipy/reference/optimize.html)
 
-    clusters = set(Cluster(location_range=tuple(loc_bin_size * np.array(c)), found_by=["Poisson 1D"]) for c in cluster_edges)
+    clusters = set(Cluster(location_range=tuple(loc_bin_size * np.array(c)), found_by=[name]) for c in cluster_edges)
 
     if return_intermediate_values:
         return clusters, bins, bin_contents, nominal_pd_quantile_level, rate
     return clusters
 
 
-def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.timedelta64(7, 'D'), nominal_circuit_fraction=.80, weigh_charges=False, min_loc_bin_count=2, max_loc_bins_skipped=2, magic_factor=4.0, min_time_bin_count=2, max_time_bins_skipped=1, return_intermediate_values=False):
+def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.timedelta64(7, 'D'), nominal_circuit_fraction=.80, weigh_charges=False, min_loc_bin_count=2, max_loc_bins_skipped=2, magic_factor=4.0, min_time_bin_count=2, max_time_bins_skipped=1, return_intermediate_values=False, name="Poisson 2D"):
     """Identify clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
@@ -235,7 +235,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         for start_index, end_index in cluster_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
             time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
-            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range), found_by=["Poisson 2D"])
+            cluster = Cluster(location_range=loc_cluster.location_range, time_range=tuple(time_range), found_by=[name])
             found_2d_clusters.add(cluster)
 
     if return_intermediate_values:
@@ -325,7 +325,7 @@ def cluster_boolean_series(series, max_consecutive_false=5, min_length=5, min_co
     return clusters
 
 
-def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01):
+def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01, name="DBSCAN"):
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
@@ -412,16 +412,33 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
         endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
         beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
-        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=["DBSCAN"]))
+        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
     return(clusters2)
 
 
-def clusterize_ensemble(circuit, algorithms):
+def clusterize_ensemble(circuit, algorithms, add=True):
+    """
+    Identify two dimensional clusters using multiple algorithms. The results are combined using the ClusterEnsemble class methods.
+    algorithms should be an iterable containing algorithms. The algorithms should take as input a clusterizer.circuit.Circuit object and give as output an iterable containing clusterizer.cluster.Cluster objects.
+    If add is set to true, the clusters will be added together. This means that the overlap is found between the clusters and the clusters are combined in a venn diagram like way. If add is set to false, the clusters will be orred together. The result of an or is the bounding box of two clusters (if they have overlap, clusters without overlap will remain separate).
+
+    :param circuit: The circuit the clusterize.
+    :type circuit: class:`clusterizer.circuit.Circuit`
+
+    :param algorithms: List of algorithms to be used
+    :type algorithms: iterable
+
+    :param add: Set to true to __add__ (+) the clusters together, set to false to __or__ (|) them together
+    :type add: bool, optional
+    """
     result = ClusterEnsemble(set())
     if not algorithms:
         return result
     for alg in algorithms:
         clusters = alg(circuit)
-        result += ClusterEnsemble.from_iterable(clusters)
+        if add:
+            result += ClusterEnsemble.from_iterable(clusters)
+        else:
+            result |= ClusterEnsemble.from_iterable(clusters)
     return result
     
