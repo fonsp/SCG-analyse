@@ -2,7 +2,8 @@ import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from . import cluster
+from . import algorithms
+import functools
 
 
 def axis_is_in_datetime_format(axis):
@@ -134,7 +135,7 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
     ax.set_ylabel("Number of PDs")
 
 
-def overlay_warnings(circuit, ax=None, opacity=.2, line_width=None, add_to_legend=True):
+def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legend=True):
     """Draw colored lines for every warning in the circuit. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
@@ -153,19 +154,7 @@ def overlay_warnings(circuit, ax=None, opacity=.2, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
-    if circuit.warning is None or circuit.warning.empty or len(circuit.warning) == 0:
-        return
-    if ax is None:
-        ax = plt.gca()
-
-    # Using str key in dict instead of int to support 'Noise' warning
-    warningcolors = {'1': 'yellow', '2': 'orange', '3': 'red', 'N': 'green'}
-
-    for i, w in circuit.warning.sort_values(by=['SCG warning level (1 to 3 or Noise)']).iterrows():
-        level = str(w["SCG warning level (1 to 3 or Noise)"])
-
-        cluster_created_from_warning = cluster.Cluster.from_circuit_warning(circuit, i, cluster_width=line_width)
-        overlay_cluster(cluster_created_from_warning, ax=ax, color=warningcolors[level], opacity=opacity, add_to_legend=add_to_legend)
+    overlay_cluster_collection(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
 def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.2, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
@@ -231,9 +220,12 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_f
 
     clabel = None
     if add_to_legend:
-        clabel = "Found by {}".format(cluster.found_by)
+        clabel = "Found by {}".format("; ".join(cluster.found_by))
     if label is not None:
         clabel = label
+
+    if color is None:
+        color = generate_color_from_string(clabel)
 
     if scale_opacity_by_found_by_count:
         opacity = np.min([1.0, opacity * len(cluster.found_by)])
@@ -284,6 +276,59 @@ def overlay_boolean_series(values, loc=None, ax=None, y1=None, y2=None, color='y
 
     # Omdat het gekleurde gebied misschien doorloopt tot de boven- en onderkanten van het plotgebied, wordt het plotgebied door matplotlib automatisch vergroot om dit te laten passen. Dit doen we ongedaan:
     ax.set_ylim(ymin, ymax)
+
+
+def generate_color_from_string(s, matplotlib_color_map_name="rainbow", superprime=111, supermod=101, magicoffset=13):
+    """Converts any string to a matplotlib color by applying a 'hash'.
+
+    The default parameters have the special property that:
+    - 'Found by DNV GL warning 1' is mapped to _yellow_.
+    - 'Found by DNV GL warning 2' is mapped to _orange_.
+    - 'Found by DNV GL warning 3' is mapped to _red_.
+    - 'Found by DNV GL warning N' is mapped to _light green_.
+
+    ---
+
+    **Implementation:**
+
+    String to integer:
+        `i = (all bytes in s, casted as single integer)`
+    specifically:
+        `i = functools.reduce(lambda a, b: a*256 + b, map(ord, s))`
+
+    Integer to rational ∈ [0,1):
+        `r = ( ((i + magicoffset) * superprime) % supermod ) / supermod`
+
+    Rational to color:
+        `color = color_map(r)`
+
+    :param s: String to convert
+    :type s: str
+
+    :param matplotlib_color_map_name: See [matplotlib docs](https://matplotlib.org/tutorials/colors/colormaps.html) for choosing a colormap.
+    :type matplotlib_color_map_name: str, optional
+
+    :param superprime: See implementation above.
+    :type superprime: int, optional
+
+    :param supermod: See implementation above.
+    :type supermod: int, optional
+
+    :param magicoffset: See implementation above.
+    :type magicoffset: int, optional
+    """
+    def str2int(s):
+        if s is None or s == "":
+            return 0
+        return functools.reduce(lambda a, b: a*256 + b, map(ord, s))
+
+    def hash(i):
+        return ((i + magicoffset) * superprime) % supermod
+
+    cmap = plt.cm.get_cmap(matplotlib_color_map_name)
+
+    r = hash(str2int(s)) / supermod
+    return cmap(r)
 
 
 def legend_without_duplicate_labels(ax=None):
