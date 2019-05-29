@@ -78,6 +78,20 @@ class Cluster:
         return str(self)
 
     def __lt__(self, other):
+        """
+        Provides the < comparison needed for a total ordering.
+        Ordering is based on a 2-dimensional location, time grid.
+        Time is seen as the more important factor in this comparison.
+        If times can't be compared or are the same, location is used instead.
+        This results in an ordering comparable to:
+        (0, 0) < (0, 1) < (0, 2) < (1, 0) < (1, 1) < (2, 0)
+
+        :param other: The other Cluster to compare self with
+        :type other: class:`clusterizer.cluster.Cluster`
+        
+        :return: True if self < other in specified total ordering, otherise False
+        :rtype: bool
+        """
         if self.time_range is None and other.time_range is None:
             if other.location_range is None:
                 return False
@@ -93,14 +107,40 @@ class Cluster:
         return self.time_range < other.time_range
 
     def __eq__(self, other):
+        """
+        Provides the == comparison needed for a total ordering.
+        True if location_range and time_range for self and other are the same.
+        
+        :param other: The other Cluster to compare self with
+        :type other: class:`clusterizer.cluster.Cluster`
+        
+        :return: True if location and time ranges in self and other are the same, otherwise False
+        :rtype: bool
+        """
         return self.location_range == other.location_range and self.time_range == other.time_range
 
     def __hash__(self):
+        """
+        A hash function that computes a number based on the location and time ranges of the Cluster
+        Use case: Adding Clusters to dictionaries, sets, etc.
+        This function is cryptographically weak and should not be used for security purposes.
+
+        :return: A hash of the Cluster
+        :rtype: int
+        """
         return hash(self.location_range) + hash(self.time_range)
 
     def __and__(self, other):
         """
-        Calculate the overlap between this cluster and another cluster
+        Calculate the overlap between this cluster and another cluster.
+        In doing so, it keeps track of the algorithms that found the Clusters.
+        If the clusters are disjunct, return None.
+
+        :param other: The other Cluster to calculate the overlap with
+        :type other: class:`clusterizer.cluster.Cluster` or None
+        
+        :return: The overlap between self and other
+        :rtype: class:`clusterizer.cluster.Cluster` or None
         """
         def overlap(first, second):
             if first is not None and second is not None:
@@ -122,16 +162,40 @@ class Cluster:
 
     def __rand__(self, other):
         """
-        Right and. Needed to make things like 'None & Cluster' work
+        Right and. Needed to make things like 'None & Cluster' work.
         """
         return self.__and__(other)
 
+    def __mul__(self, other):
+        """
+        Calculate the overlap between this cluster and another cluster.
+        Alternate alias for the & operator. Behaves exactly the same as &.
+
+        :param other: The other Cluster to calculate the overlap with
+        :type other: class:`clusterizer.cluster.Cluster` or None
+        
+        :return: The overlap between self and other
+        :rtype: class:`clusterizer.cluster.Cluster` or None
+        """
+        return self & other
+
     def overlap(self, other):
+        """
+        Alias for self & other.
+        """
         return self & other
 
     def __or__(self, other):
         """
-        Calculate the smallest cluster which has both self and other as a subcluster
+        Calculate the smallest cluster which has both self and other as a subcluster.
+        This is also known as the bounding box containing self and other.
+        If other is None, return None.
+
+        :param other: The other Cluster to calculate to bounding box with
+        :type other: class:`clusterizer.cluster.Cluster` or None
+
+        :return: The bounding box of self and other
+        :rtype: class:`clusterizer.cluster.Cluster` or None
         """
         def least_common_superrange(first, second):
             if first is not None and second is not None:
@@ -144,10 +208,36 @@ class Cluster:
         return Cluster(least_common_superrange(self.location_range, other.location_range), least_common_superrange(self.time_range, other.time_range), self.found_by | other.found_by)
 
     def __ror__(self, other):
+        """
+        Right or. Needed to make things like 'None | Cluster' work.
+        """
         return self.__or__(other)
 
+    def supercluster(self, other):
+        """
+        Alias for self | other.
+        """
+        return self | other
+
+    def bounding_box(self, other):
+        """
+        Alias for self | other.
+        """
+        return self | other
+
     def disjunct(self, other):
-        # return (self & other) is None
+        """
+        Determines if two Clusters are disjunct. That is, disjunct(self, other) returns:
+        - True if self and other do not overlap
+        - False if self and other overlap
+        So: disjunct(self, other) is another way (more efficient) way to write `(self & other) is None`
+
+        :param other: The other Cluster to compare self to
+        :type other: class:`clusterizer.cluster.Cluster` or None
+        
+        :return: True if self and other are disjunct, False otherwise
+        :rtype: bool
+        """
         def disjunct_range(first, second):
             if first is not None and second is not None:
                 return first[1] <= second[0] or second[1] <= first[0]
@@ -156,13 +246,18 @@ class Cluster:
             return True
         return disjunct_range(self.location_range, other.location_range) or disjunct_range(self.time_range, other.time_range)
 
-    def supercluster(self, other):
-        return self | other
-
     def __sub__(self, other):
         """
-        Calculate self without other (set theoretic: self \\ other)
-        Returns a Set containing Clusters
+        Calculate self without other, overloading the - operator.
+        This is similar to the set-theoretic operation: self \ other.
+        Unlike &, | and +, - is not commutative. self - other is not equal to other - self.
+        Returns a set containing Cluster objects. Together, these Clusters represent self - other.
+        
+        :param other: The other Cluster to substract from self
+        :rtype other: class:`clusterizer.cluster.Cluster`
+
+        :return: set containing clusters 
+        :rtype: set of class:`clusterizer.cluster.Cluster`
         """
         def empty_range(r):
             if r is None:
@@ -178,32 +273,50 @@ class Cluster:
 
         if self.disjunct(other):
             return set([self])
+        #self - other is the same as self - (self & other), since (other - self) and self are disjunct
         overlap = self & other
-        left_locations = (self.location_range[0], overlap.location_range[0])
-        middle_locations = overlap.location_range
-        right_locations = (overlap.location_range[1], self.location_range[1])
+        #For the range [ ] and overlap range { }, we can represent all cases with the model:
+        # [ { } ], where we need to calculate the 3 ranges [ {, { }, and } ]
+        left_locations = (self.location_range[0], overlap.location_range[0])   # [ {
+        middle_locations = overlap.location_range                              # { }
+        right_locations = (overlap.location_range[1], self.location_range[1])  # } ]
         if self.time_range is not None and overlap.time_range is not None:
-            lower_times = (self.time_range[0], overlap.time_range[0])
-            middle_times = overlap.time_range
-            upper_times = (overlap.time_range[1], self.time_range[1])
+            lower_times = (self.time_range[0], overlap.time_range[0])          # [ {
+            middle_times = overlap.time_range                                  # { }
+            upper_times = (overlap.time_range[1], self.time_range[1])          # } ]
         else:
             lower_times, middle_times, upper_times = self.time_range, self.time_range, self.time_range
-        lu = Cluster(left_locations, upper_times, found_by=self.found_by)
-        mu = Cluster(middle_locations, upper_times, found_by=self.found_by)
-        ru = Cluster(right_locations, upper_times, found_by=self.found_by)
-        lm = Cluster(left_locations, middle_times, found_by=self.found_by)
-        rm = Cluster(right_locations, middle_times, found_by=self.found_by)
-        ll = Cluster(left_locations, lower_times, found_by=self.found_by)
-        ml = Cluster(middle_locations, lower_times, found_by=self.found_by)
-        rl = Cluster(right_locations, lower_times, found_by=self.found_by)
+        #Split cluster into 9 regions in a 3x3 grid, of which the center region ({ }, { }) is never needed
+        #Depending on where self and other overlap, some of these can be empty
+        lu = Cluster(left_locations, upper_times, found_by=self.found_by)     # [ {, [ {
+        mu = Cluster(middle_locations, upper_times, found_by=self.found_by)   # { }, [ {
+        ru = Cluster(right_locations, upper_times, found_by=self.found_by)    # } ], [ {
+        lm = Cluster(left_locations, middle_times, found_by=self.found_by)    # [ {, { }
+        rm = Cluster(right_locations, middle_times, found_by=self.found_by)   # } ], { }
+        ll = Cluster(left_locations, lower_times, found_by=self.found_by)     # [ {, } ]
+        ml = Cluster(middle_locations, lower_times, found_by=self.found_by)   # { }, } ]
+        rl = Cluster(right_locations, lower_times, found_by=self.found_by)    # } ], } ]
         mini_clusters = [lu, mu, ru, lm, rm, ll, ml, rl]
         result = set()
+        #Filter out the empty regions of the 3x3 grid        
         for c in mini_clusters:
             if not empty_cluster(c):
                 result.add(c)
         return result
 
     def __add__(self, other):
+        """
+        Calculated the rich set-theoretic union of two Clusters, overloading the + operator.
+        In doing so, it keeps track of which algorithms found the clusters.
+        The best analogy for the result is a Venn diagram. The overlapping parts are where the algorithms agree. Unlike &, + also remembers where the algorithms disagree.
+        Returns a set containing Cluster objects. Together, these Clusters represent self + other.
+        
+        :param other: The other Cluster to calculate the union with
+        :type other: class:`clusterizer.cluster.Cluster`
+        
+        :return: The set-theoretic union of self and other
+        :rtype: set of class:`clusterizer.cluster.Cluster`
+        """
         if other is None:
             return set([self])
         if self.disjunct(other):
@@ -213,8 +326,7 @@ class Cluster:
         oms = other - self
         return set([overlap]) | smo | oms
 
-    def __mul__(self, other):
-        return self & other
+
 
     def get_partial_discharges(self, circuit):
         """Returns all PDs that lie in the Cluster."""

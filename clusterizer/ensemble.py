@@ -166,7 +166,7 @@ class ClusterSet:
         In doing so, it keeps track of which algorithms found the clusters.
         The best analogy for the result is a Venn diagram. The overlapping parts are where the algorithms agree. Unlike &, + also remembers where the algorithms disagree.
         
-        :param other: The other ClusterSet to calculate the bounding box with
+        :param other: The other ClusterSet to calculate the union with
         :type other: class:`clusterizer.ensemble.ClusterSet`
 
         :return: The set-theoretic union of the clusters in self and other
@@ -419,7 +419,7 @@ class ClusterEnsemble:
         In doing so, it keeps track of which algorithms found the clusters.
         The best analogy for the result is a Venn diagram. The overlapping parts are where the algorithms agree. Unlike &, + also remembers where the algorithms disagree.
         
-        :param other: The other ClusterEnsemble to calculate the bounding box with
+        :param other: The other ClusterEnsemble to calculate the union with
         :type other: class:`clusterizer.ensemble.ClusterEnsemble`
 
         :return: The set-theoretic union of the ClusterSets in self and other
