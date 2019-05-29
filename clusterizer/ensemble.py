@@ -215,5 +215,11 @@ class ClusterEnsemble:
         return result
 
     def most_confident(self):
-        """Returns a new ClusterEnsemble containing only those Clusters of `self` with the highest number of algorithms that found it."""
-        return self.flatten().most_confident()
+    """
+    Returns a ClusterEnsemble with for each ClusterSet in `self` the Clusters in that ClusterSet with the highest number of algorithms that found it.
+    Confidence doesn't have to be the same for each ClusterSet. For example, one ClusterSet could contain overlap while another is only found by one algorithm. In this case, for the first ClusterSet, only the overlap is returned, while for the second ClusterSet, it is returned in its entirety.
+    """
+        result = set()
+        for clusterset in self:
+            result.add(clusterset.most_confident())
+        return ClusterEnsemble(result)
