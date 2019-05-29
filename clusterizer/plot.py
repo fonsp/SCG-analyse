@@ -35,9 +35,9 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, d
     times = circuit.pd['Date/time (UTC)'][circuit.pd_occured]
     charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured]
     if dot_size_to_charge_ratio is None:
-        ax.scatter(x=locations, y=times, s=0.1, c=dot_colors)
+        ax.scatter(x=locations, y=times, s=0.1, c=dot_colors, marker='8')
     else:
-        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label="Circuit {0}".format(circuit.circuitnr))
+        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label="Circuit {0}".format(circuit.circuitnr), marker='8')
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Date")
 
