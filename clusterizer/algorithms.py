@@ -10,7 +10,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     """Identify location clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param certainty: After a model is fitted to nominal PD behaviour, line sections with bin counts that are _abnormally high, with given certainty_ are identified as "highly suspicious".
     :type certainty: float, optional
@@ -36,12 +36,12 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     :return: When return_intermediate_values is False, returns the found clusters.
     When return_intermediate_values is True, returns
     5-element tuple containing
-        (list of class:`clusterizer.cluster.Cluster`) found clusters;
+        (set of class:`clusterizer.cluster.Cluster`) found clusters;
         (np.ndarray) bin edges (including the right-most edge);
         (np.ndarray) bin counts;
         (float) the found 80% threshold of bin counts;
         (float) the rate parameter of the fitted Poisson model;
-    :rtype: list of class:`clusterizer.cluster.Cluster` or tuple
+    :rtype: set of class:`clusterizer.cluster.Cluster` or tuple
     """
     # TODO: the actual _certainty_ that a found cluster is abnormal is greater than 95%: it is the probability of finding _3 abnormal values, with at most 2 skipped values between them_. A lower bound would be
     # binomcdf(n=7, k=3, p=.05) = 0.999806421875
@@ -98,7 +98,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     """Identify clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param certainty: After a model is fitted to nominal PD behaviour, line sections with bin counts that are _abnormally high, with given certainty_ are identified as "highly suspicious". TODO
     :type certainty: float, optional
@@ -136,14 +136,14 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     :return: When return_intermediate_values is False, returns the found 2D clusters.
     When return_intermediate_values is True, returns
     7-element tuple containing
-        (list of class:`clusterizer.cluster.Cluster`) found 2D clusters;
-        (list of class:`clusterizer.cluster.Cluster`) found location clusters;
-        (list of class:`clusterizer.cluster.Cluster`) found nusters;
+        (set of class:`clusterizer.cluster.Cluster`) found 2D clusters;
+        (set of class:`clusterizer.cluster.Cluster`) found location clusters;
+        (set of class:`clusterizer.cluster.Cluster`) found nusters;
         (np.ndarray) bin edges (including the right-most edge);
         (np.ndarray) bin counts;
         (float) the found 80% threshold of bin counts;
         (float) the rate parameter of the fitted Poisson model;
-    :rtype: list of class:`clusterizer.cluster.Cluster` or tuple
+    :rtype: set of class:`clusterizer.cluster.Cluster` or tuple
     """
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
@@ -329,7 +329,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.Circuit`
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param binLengthX: Location bin width (m)
     :type binLengthX: float
@@ -347,7 +347,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     :type shave: float
 
     :return: found clusters
-    :rtype: list of class:`clusterizer.cluster.Cluster`
+    :rtype: set of class:`clusterizer.cluster.Cluster`
     """
 
     # loading data
@@ -441,4 +441,29 @@ def clusterize_ensemble(circuit, algorithms, add=True):
         else:
             result |= ClusterEnsemble.from_iterable(clusters)
     return result
-    
+
+
+def warnings_to_clusters(circuit, include_noise_warnings=True, cluster_width=None):
+    """
+    A clusterizer 'algorithm' that creates a Cluster for each warning given by DNV GL.
+
+    :param circuit: The circuit the clusterize.
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
+
+    :param include_noise_warnings: When set to False, "Noise" warnings are skipped, and only level 1-3 warnings are converted.
+    :type include_noise_warnings: bool, optional
+
+    :param cluster_width: Width (m) of the Cluster to create. When set to `None`, 1% of the circuit length is used (0.5% at both sides).
+    :type cluster_width: float, optional
+    """
+    if circuit.warning is None or circuit.warning.empty or len(circuit.warning) == 0:
+        return set()
+
+    warning_clusters = set()
+    for i, w in circuit.warning.sort_values(by=['SCG warning level (1 to 3 or Noise)']).iterrows():
+        # Using str key in dict instead of int to support 'Noise' warning
+        level = str(w["SCG warning level (1 to 3 or Noise)"])
+
+        if include_noise_warnings or not level == "N":
+            warning_clusters.add(Cluster.from_circuit_warning(circuit, i, cluster_width=cluster_width))
+    return warning_clusters

@@ -1,4 +1,5 @@
 from functools import total_ordering
+import functools
 import numpy as np
 import pandas as pd
 from . import cluster
@@ -14,8 +15,8 @@ class ClusterSet:
 
     def __str__(self):
         result = "{"
-        for cluster in self.clusters:
-            result += str(cluster) + "\n"
+        for c in self.clusters:
+            result += str(c) + "\n"
         return result[:-1] + "}"
 
     def __repr__(self):
@@ -87,24 +88,25 @@ class ClusterSet:
         return result
 
     def get_partial_discharges(self, circuit):
-        partial_discharges = None
-        for cluster in self.clusters:
-            if partial_discharges is None:
-                partial_discharges = cluster.get_partial_discharges(circuit)
-            else:
-                partial_discharges = pd.concat([partial_discharges, cluster.get_partial_discharges(circuit)], ignore_index=True)
-        return partial_discharges
+        """Returns all PDs that lie in any of the Clusters in this ClusterSet."""
+        return circuit.pd[circuit.pd_occured].loc[self.get_partial_discharge_mask(circuit)]
+
+    def get_partial_discharge_mask(self, circuit):
+        """Returns a boolean array which indicates, for each PD, whether it lies in any of the Clusters in this ClusterSet."""
+        return functools.reduce(np.logical_or, [cs.get_partial_discharge_mask(circuit) for cs in self.clusters])
 
     def most_confident(self):
+        """Returns a new ClusterSet containing only those Clusters of `self` with the highest number of algorithms that found it."""
         result = set()
-        confidence = 0
-        for cluster in self:
+        confidence = -1
+        for c in self:
             if len(cluster.found_by) > confidence:
-                result = set([cluster])
+                result = {cluster}
                 confidence = len(cluster.found_by)
             elif len(cluster.found_by) == confidence:
                 result.add(cluster)
         return ClusterSet(result)
+
 
 class ClusterEnsemble:
     """
@@ -113,6 +115,7 @@ class ClusterEnsemble:
     Each set in the ensemble represents a cluster of arbitrary shape
     The Cluster objects in each ClusterSet are 'rectangels' which combine to make a cluster
     """
+
     def __init__(self, sets):
         self.sets = set(sets)
 
@@ -122,20 +125,20 @@ class ClusterEnsemble:
         for x in cluster_iterable:
             ensemble.add(ClusterSet([x]))
         return ClusterEnsemble(ensemble)
-        
+
     def __str__(self):
         result = "{"
-        for cluster in self:
-            result += str(cluster) + "\n"
+        for c in self:
+            result += str(c) + "\n"
         return result[:-1] + "}"
-    
+
     def __repr__(self):
         return str(self)
 
     def __hash__(self):
         hashed = 0
-        for cluster in self.sets:
-            hashed += hash(cluster)
+        for c in self.sets:
+            hashed += hash(c)
         return hashed
 
     def __iter__(self):
@@ -155,14 +158,15 @@ class ClusterEnsemble:
         return result
 
     def flatten(self):
+        """Returns a ClusterSet containing all Clusters contained in _any_ ClusterSet of this ClusterEnsemble."""
         result = set()
         for clusterset in self:
             result |= clusterset.as_set()
-        return ClusterEnsemble([ClusterSet(result)])
-    
+        return ClusterSet(result)
+
     def as_set(self):
         return self.sets
-    
+
     def as_list(self):
         return list(self.sets)
 
@@ -211,8 +215,5 @@ class ClusterEnsemble:
         return result
 
     def most_confident(self):
-        result = set()
-        for clusterset in self:
-            result.add(clusterset.most_confident())
-        return ClusterEnsemble(result)
-
+        """Returns a new ClusterEnsemble containing only those Clusters of `self` with the highest number of algorithms that found it."""
+        return self.flatten().most_confident()
