@@ -416,7 +416,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     return(clusters2)
 
 
-def clusterize_ensemble(circuit, algorithms, add=True):
+def clusterize_ensemble(circuit, algorithms=None, add=True):
     """
     Identify two dimensional clusters using multiple algorithms. The results are combined using the ClusterEnsemble class methods.
     algorithms should be an iterable containing algorithms. The algorithms should take as input a clusterizer.circuit.Circuit object and give as output an iterable containing clusterizer.cluster.Cluster objects.
@@ -425,15 +425,15 @@ def clusterize_ensemble(circuit, algorithms, add=True):
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.Circuit`
 
-    :param algorithms: List of algorithms to be used
-    :type algorithms: iterable
+    :param algorithms: List of algorithms (methods from this submodule) to be used. Defaults to [clusterize_poisson, clusterize_DBSCAN].
+    :type algorithms: iterable, optional
 
     :param add: Set to true to __add__ (+) the clusters together, set to false to __or__ (|) them together
     :type add: bool, optional
     """
     result = ClusterEnsemble(set())
-    if not algorithms:
-        return result
+    if algorithms is None:
+        algorithms = [clusterize_poisson, clusterize_DBSCAN]
     for alg in algorithms:
         clusters = alg(circuit)
         if add:
