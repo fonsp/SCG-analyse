@@ -1,7 +1,6 @@
 # To create the animated DBSCAN alliander logo
 
-
-# Creates a modification to the pattern generation code in:
+# Creates a modification to the pattern generation code and drawing code in:
 # https://www.naftaliharris.com/blog/visualizing-dbscan-clustering/
 
 from PIL import Image
