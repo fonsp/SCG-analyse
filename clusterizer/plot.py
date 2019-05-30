@@ -180,7 +180,7 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     overlay_cluster_collection(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
-def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.2, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
     """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
