@@ -14,8 +14,6 @@ rgb_im = im.convert('RGB')
 
 w, h = im.width, im.height
 
-
-
 Nimage = 1000000
 
 noise_prob = .01
@@ -23,10 +21,6 @@ noise_prob = .01
 noise_mean = 700
 image_mean = 10000
 image_std = 3000
-
-
-
-
 
 s = []
 
