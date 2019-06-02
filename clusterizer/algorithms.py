@@ -372,7 +372,7 @@ def group_boxes(grid,condition,sizex,sizey):
         groupcount+=1
     return np.array(groups)
 
-def pinta(circuit,placeinterval=10,timeinterval=np.timedelta64(7,'D'),sensitivity=1):
+def pinta(circuit,placeinterval=10,timeinterval=np.timedelta64(7,'D'),sensitivity=1,name="Pinta"):
     """Algorithm that identifies clusters by using the fact that a lot of 2D-bins have the same amount of partial discharges. If the "gap" between two bins is too high, it means there is something going on with the bin. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
@@ -427,7 +427,7 @@ def pinta(circuit,placeinterval=10,timeinterval=np.timedelta64(7,'D'),sensitivit
         maxplace[i]=(maxc[0]+1)*placeinterval
         mintime[i]=mintimes+minc[1]*timeinterval
         maxtime[i]=mintimes+(maxc[1]+1)*timeinterval
-    clusters=set(Cluster(location_range=(minplace[i],maxplace[i]),time_range=(mintime[i],maxtime[i])) for i in range(len(groups)))
+    clusters=set(Cluster(location_range=(minplace[i],maxplace[i]),time_range=(mintime[i],maxtime[i]),found_by=[name]) for i in range(len(groups)))
     return clusters
 
 ##END OF PINTA ALGORITHM
