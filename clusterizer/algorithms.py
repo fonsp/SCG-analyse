@@ -427,7 +427,7 @@ def pinta(circuit,placeinterval=10,timeinterval=np.timedelta64(7,'D'),sensitivit
         maxplace[i]=(maxc[0]+1)*placeinterval
         mintime[i]=mintimes+minc[1]*timeinterval
         maxtime[i]=mintimes+(maxc[1]+1)*timeinterval
-    clusters=set(clusterizer.cluster.Cluster(location_range=(minplace[i],maxplace[i]),time_range=(mintime[i],maxtime[i])) for i in range(len(groups)))
+    clusters=set(Cluster(location_range=(minplace[i],maxplace[i]),time_range=(mintime[i],maxtime[i])) for i in range(len(groups)))
     return clusters
 
 ##END OF PINTA ALGORITHM
