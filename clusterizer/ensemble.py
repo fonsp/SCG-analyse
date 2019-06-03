@@ -203,11 +203,11 @@ class ClusterSet:
         result = set()
         confidence = -1
         for c in self:
-            if len(cluster.found_by) > confidence:
-                result = {cluster}
-                confidence = len(cluster.found_by)
-            elif len(cluster.found_by) == confidence:
-                result.add(cluster)
+            if len(c.found_by) > confidence:
+                result = {c}
+                confidence = len(c.found_by)
+            elif len(c.found_by) == confidence:
+                result.add(c)
         return ClusterSet(result)
 
 
@@ -451,3 +451,4 @@ class ClusterEnsemble:
         for clusterset in self:
             result.add(clusterset.most_confident())
         return ClusterEnsemble(result)
+
