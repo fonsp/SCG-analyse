@@ -520,7 +520,7 @@ def clusterize_DBSCAN(circuit, binLengthX=2, binLengthY=1, epsilon=3, minPts=125
         endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
         beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
-        rectangles2.add(Rectangles(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
+        rectangles2.add(Rectangle(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
     return(ClusterEnsemble(rectangles2))
 
 

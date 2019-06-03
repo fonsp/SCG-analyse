@@ -172,18 +172,18 @@ class Cluster:
         :rtype: class:`clusterizer.ensemble.Cluster`
         """
         if self.disjunct(other):
-            return Cluster(self.rectangles | other.clusters)
+            return Cluster(self.rectangles | other.rectangles)
         result = Cluster(self.rectangles)
-        helper = Cluster(other.clusters)
+        helper = Cluster(other.rectangles)
         while helper:
-            helpercur = helper.clusters.pop()
+            helpercur = helper.rectangles.pop()
             for clust in result:
                 if not helpercur.disjunct(clust):
-                    helper.clusters |= helpercur + clust
-                    result.clusters.remove(clust)
+                    helper.rectangles |= helpercur + clust
+                    result.rectangles.remove(clust)
                     break
             else:
-                result.clusters.add(helpercur)
+                result.rectangles.add(helpercur)
         return result
 
     def get_partial_discharges(self, circuit):
@@ -451,4 +451,3 @@ class ClusterEnsemble:
         for cluster in self:
             result.add(cluster.most_confident())
         return ClusterEnsemble(result)
-
