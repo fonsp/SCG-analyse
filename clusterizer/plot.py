@@ -36,11 +36,11 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, d
     """
     if ax is None:
         ax = plt.gca()
-    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else None
+    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else ""
 
-    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured]
-    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured]
-    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured]
+    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured].values
+    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured].values
+    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured].values
     if dot_size_to_charge_ratio is None:
         ax.scatter(x=locations, y=times, s=0.1, c=dot_colors, marker='8', edgecolors="none")
     else:
