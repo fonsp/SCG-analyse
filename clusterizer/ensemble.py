@@ -380,7 +380,7 @@ class ClusterEnsemble:
                 overlap = cs1 & cs2
                 if overlap:
                     result.add(overlap)
-        return result
+        return ClusterEnsemble(result)
 
     def __or__(self, other):
         """
