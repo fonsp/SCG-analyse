@@ -3,6 +3,7 @@ import scipy.stats
 import functools
 from clusterizer.rectangle import Rectangle
 from clusterizer.ensemble import ClusterEnsemble
+from clusterizer.cluster import Cluster
 from sklearn.cluster import DBSCAN
 
 
@@ -238,9 +239,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
             rectangle = Rectangle(location_range=loc_rectangle.location_range, time_range=tuple(time_range), found_by=[name])
             found_2d_rectangles.add(rectangle)
 
-        found_2d_clusters = ClusterEnsemble(found_2d_rectangles)
+        found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
     if return_intermediate_values:
-        nusters = ClusterEnsemble(set(Rectangle(location_range=tuple(r)) for r in nuster_ranges))
+        nusters = ClusterEnsemble(Cluster({Rectangle(location_range=tuple(r))}) for r in nuster_ranges)
         return found_2d_clusters, loc_rectangles, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
     return found_2d_clusters
 
@@ -429,7 +430,7 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
         maxplace[i] = (maxc[0]+1)*placeinterval
         mintime[i] = mintimes+minc[1]*timeinterval
         maxtime[i] = mintimes+(maxc[1]+1)*timeinterval
-    clusters = ClusterEnsemble(set(Rectangle(location_range=(minplace[i], maxplace[i]), time_range=(mintime[i], maxtime[i]), found_by=[name]) for i in range(len(groups))))
+    clusters = ClusterEnsemble(Cluster({Rectangle(location_range=(minplace[i], maxplace[i]), time_range=(mintime[i], maxtime[i]), found_by=[name])}) for i in range(len(groups)))
     return clusters
 
 
@@ -521,7 +522,7 @@ def clusterize_DBSCAN(circuit, binLengthX=2, binLengthY=1, epsilon=3, minPts=125
         beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
         rectangles2.add(Rectangle(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
-    return(ClusterEnsemble(rectangles2))
+    return(ClusterEnsemble(Cluster({r}) for r in rectangles2))
 
 
 def clusterize_ensemble_additive(circuit, algorithms=None, add=True):
@@ -574,4 +575,4 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, rectangle_width=N
 
         if include_noise_warnings or not level == "N":
             warning_rectangles.add(Rectangle.from_circuit_warning(circuit, i, rectangle_width=rectangle_width))
-    return warning_rectangles
+    return ClusterEnsemble(Cluster({r}) for r in warning_rectangles)

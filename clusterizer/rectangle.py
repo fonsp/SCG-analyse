@@ -16,9 +16,8 @@ class Rectangle:
         self.location_range = location_range
         self.time_range = time_range
         if found_by is None:
-            self.found_by = set()
-        else:
-            self.found_by = set(found_by)
+            found_by = {}
+        self.found_by = set(found_by)
 
     @staticmethod
     def from_circuit_warning(circuit, warning_index, rectangle_width=None):
@@ -88,7 +87,7 @@ class Rectangle:
 
         :param other: The other Rectangle to compare self with
         :type other: class:`clusterizer.rectangle.Rectangle`
-        
+
         :return: True if self < other in specified total ordering, otherise False
         :rtype: bool
         """
@@ -110,10 +109,10 @@ class Rectangle:
         """
         Provides the == comparison needed for a total ordering.
         True if location_range and time_range for self and other are the same.
-        
+
         :param other: The other Rectangle to compare self with
         :type other: class:`clusterizer.rectangle.Rectangle`
-        
+
         :return: True if location and time ranges in self and other are the same, otherwise False
         :rtype: bool
         """
@@ -138,7 +137,7 @@ class Rectangle:
 
         :param other: The other Rectangle to calculate the overlap with
         :type other: class:`clusterizer.rectangle.Rectangle` or None
-        
+
         :return: The overlap between self and other
         :rtype: class:`clusterizer.rectangle.Rectangle` or None
         """
@@ -173,7 +172,7 @@ class Rectangle:
 
         :param other: The other Rectangle to calculate the overlap with
         :type other: class:`clusterizer.rectangle.Rectangle` or None
-        
+
         :return: The overlap between self and other
         :rtype: class:`clusterizer.rectangle.Rectangle` or None
         """
@@ -234,7 +233,7 @@ class Rectangle:
 
         :param other: The other Rectangle to compare self to
         :type other: class:`clusterizer.rectangle.Rectangle` or None
-        
+
         :return: True if self and other are disjunct, False otherwise
         :rtype: bool
         """
@@ -252,11 +251,11 @@ class Rectangle:
         This is similar to the set-theoretic operation: self \ other.
         Unlike &, | and +, - is not commutative. self - other is not equal to other - self.
         Returns a set containing Rectangle objects. Together, these Rectangles represent self - other.
-        
+
         :param other: The other Rectangle to substract from self
         :rtype other: class:`clusterizer.rectangle.Rectangle`
 
-        :return: set containing rectangles 
+        :return: set containing rectangles
         :rtype: set of class:`clusterizer.rectangle.Rectangle`
         """
         def empty_range(r):
@@ -298,7 +297,7 @@ class Rectangle:
         rl = Rectangle(right_locations, lower_times, found_by=self.found_by)    # } ], } ]
         mini_rectangles = [lu, mu, ru, lm, rm, ll, ml, rl]
         result = set()
-        #Filter out the empty regions of the 3x3 grid        
+        #Filter out the empty regions of the 3x3 grid
         for c in mini_rectangles:
             if not empty_rectangle(c):
                 result.add(c)
@@ -310,10 +309,10 @@ class Rectangle:
         In doing so, it keeps track of which algorithms found the rectangles.
         The best analogy for the result is a Venn diagram. The overlapping parts are where the algorithms agree. Unlike &, + also remembers where the algorithms disagree.
         Returns a set containing Rectangle objects. Together, these Rectangles represent self + other.
-        
+
         :param other: The other Rectangle to calculate the union with
         :type other: class:`clusterizer.rectangle.Rectangle`
-        
+
         :return: The set-theoretic union of self and other
         :rtype: set of class:`clusterizer.rectangle.Rectangle`
         """
