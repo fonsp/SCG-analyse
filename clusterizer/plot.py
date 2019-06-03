@@ -243,7 +243,7 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_f
 
     clabel = None
     if add_to_legend:
-        clabel = "Found by {}".format("; ".join(cluster.found_by))
+        clabel = "Found by {}".format("; ".join(sorted(cluster.found_by)))
     if label is not None:
         clabel = label
 
