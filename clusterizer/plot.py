@@ -13,7 +13,7 @@ def axis_is_in_datetime_format(axis):
     return type(axis.get_major_formatter()) == pd.plotting._converter.PandasAutoDateFormatter
 
 
-def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, dot_colors="black"):
+def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, dot_colors="black", add_to_legend=False, set_title=True):
     """Draw a location (x) vs time (y) scatter plot.
 
     :param circuit: Circuit object containing PD series to plot
@@ -28,22 +28,31 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, d
     :param dot_colors: A single color or a list of colors to use as dot colors.
     :type dot_colors: color, optional
 
+    :param add_to_legend: Label circuit number?
+    :type add_to_legend: bool, optional
+
+    :param set_title: When True, axis title will be set to 'Circuit ~circuitnr~'.
+    :type set_title: bool
     """
     if ax is None:
         ax = plt.gca()
+    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else None
 
     locations = circuit.pd['Location in meters (m)'][circuit.pd_occured]
     times = circuit.pd['Date/time (UTC)'][circuit.pd_occured]
     charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured]
     if dot_size_to_charge_ratio is None:
-        ax.scatter(x=locations, y=times, s=0.1, c=dot_colors, marker='8')
+        ax.scatter(x=locations, y=times, s=0.1, c=dot_colors, marker='8', edgecolors="none")
     else:
-        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label="Circuit {0}".format(circuit.circuitnr), marker='8')
+        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label=label, marker='8', edgecolors="none")
+
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Date")
+    if set_title:
+        ax.set_title("Circuit {0}".format(circuit.circuitnr))
 
 
-def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='black'):
+def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='black', add_to_legend=False, set_title=True):
     """Draw a histogram of PD locations.
 
     :param circuit: Circuit object containing PD series to plot
@@ -61,6 +70,12 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
     :param color: Bar color
     :type color: color, optional
 
+    :param add_to_legend: Label circuit number?
+    :type add_to_legend: bool, optional
+
+    :param set_title: When True, axis title will be set to 'Circuit ~circuitnr~'.
+    :type set_title: bool
+
     :return: Array of histogram values, corresponding to accumulated bin content.
     :rtype: numpy.ndarray
     """
@@ -71,13 +86,16 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
     hist_weights = None
     if weigh_charges:
         hist_weights = circuit.pd["Charge (picocoulomb)"]
+    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else None
 
-    counts, _, _ = ax.hist(circuit.pd["Location in meters (m)"], weights=hist_weights, bins=bins, color=color, label="Circuit {0}".format(circuit.circuitnr))
+    counts, _, _ = ax.hist(circuit.pd["Location in meters (m)"], weights=hist_weights, bins=bins, color=color, label=label)
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Number of PDs")
+    if set_title:
+        ax.set_title("Circuit {0}".format(circuit.circuitnr))
 
 
-def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=None, bins=None, sort=False, color='black'):
+def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=None, bins=None, sort=False, color='black', set_title=True):
     """
     Draw a histogram, binning partial discharges along the time dimension.
 
@@ -101,6 +119,9 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
 
     :param color: Bar color
     :type color: color, optional
+
+    :param set_title: When True, axis title will be set to 'Circuit ~circuitnr~'.
+    :type set_title: bool
     """
     if ax is None:
         ax = plt.gca()
@@ -133,6 +154,8 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
         ax.set_xlabel("Time")
     ax.set_title("Circuit {0}, from {1} meter to {2} meter".format(circuit.circuitnr, round(partial_discharges[location_column][partial_discharges.index[0]], 1), round(partial_discharges[location_column][partial_discharges.index[-1]], 1)))
     ax.set_ylabel("Number of PDs")
+    if set_title:
+        ax.set_title("Circuit {0}".format(circuit.circuitnr))
 
 
 def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legend=True):
@@ -157,7 +180,7 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     overlay_cluster_collection(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
-def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.2, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
     """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
@@ -317,6 +340,24 @@ def generate_color_from_string(s, matplotlib_color_map_name="rainbow", superprim
     :param magicoffset: See implementation above.
     :type magicoffset: int, optional
     """
+
+    # Quick fix
+
+    poissonred = np.array([255, 126, 126, 255])/255.0
+    dbblue = np.array([126, 206, 255, 255])/255.0
+    pintayellow = np.array([255, 230, 69, 255])/255.0
+
+    sl = s.lower()
+    if sl.startswith("found by"):
+        matches = []
+        if "poisson" in sl:
+            matches.append(poissonred)
+        if "dbscan" in sl:
+            matches.append(dbblue)
+        if any(x in sl for x in ["dennis", "pinta", "paint"]):
+            matches.append(pintayellow)
+        return tuple(sum(matches) / len(matches))
+
     def str2int(s):
         if s is None or s == "":
             return 0
@@ -340,3 +381,35 @@ def legend_without_duplicate_labels(ax=None):
     ct = lambda h: tuple(h.get_facecolor()[0])
     unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i] or ct(h) not in map(ct, handles[:i])]
     ax.legend(*zip(*unique))
+
+
+def save_figure_for_latex(filename, reset_size=True):
+    """Slaat het laatste gebruikte `figure` (waar alle `Axes` in zitten) op als .pdf. De grootte van de figure wordt veranderd naar een standaardgrootte."""
+    fig = plt.gcf()
+
+    if reset_size:
+        fig.set_size_inches((8, 5))
+    if not filename.endswith(".pdf"):
+        filename = filename + ".pdf"
+
+    fig.savefig(filename)
+
+    if "/" not in filename:
+        filename = "/notebooks/" + filename
+    print("Saved to "+filename)
+
+
+def save_figure_for_google_slides(filename, reset_size=True, dpi=600):
+    """Slaat het laatste gebruikte `figure` (waar alle `Axes` in zitten) op als .png. De grootte van de figure wordt veranderd naar een standaardgrootte."""
+    fig = plt.gcf()
+
+    if reset_size:
+        fig.set_size_inches((8, 5))
+    if not filename.endswith(".png"):
+        filename = filename + ".png"
+
+    fig.savefig(filename, dpi=dpi)
+
+    if "/" not in filename:
+        filename = "/notebooks/" + filename
+    print("Saved to "+filename)

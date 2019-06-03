@@ -1,7 +1,5 @@
-from functools import total_ordering
 import functools
 import numpy as np
-import pandas as pd
 from . import cluster
 
 
@@ -10,6 +8,7 @@ class ClusterSet:
     A set of Cluster objects
     In a ClusterEnsemble, this represents one cluster
     """
+
     def __init__(self, clusters):
         """
         :param clusters: The clusters to be added to this ClusterSet
@@ -29,7 +28,7 @@ class ClusterSet:
     def __bool__(self):
         """
         Boolean representation of a ClusterSet. Mirrors behaviour of sets.
-        
+
         :return: False if self.clusters is empty, True if non-empty
         :rtype: bool
         """
@@ -38,7 +37,7 @@ class ClusterSet:
     def __len__(self):
         """
         Number of Clusters in the ClusterSet. Mirrors behaviour of sets.
-        
+
         :return: The length of self.clusters
         :rtype: int
         """
@@ -165,7 +164,7 @@ class ClusterSet:
         This is done by calling the + operator on the underlying Cluster objects.
         In doing so, it keeps track of which algorithms found the clusters.
         The best analogy for the result is a Venn diagram. The overlapping parts are where the algorithms agree. Unlike &, + also remembers where the algorithms disagree.
-        
+
         :param other: The other ClusterSet to calculate the union with
         :type other: class:`clusterizer.ensemble.ClusterSet`
 
@@ -282,7 +281,7 @@ class ClusterEnsemble:
     def __bool__(self):
         """
         Boolean representation of a ClusterEnsemble. Mirrors behaviour of sets.
-        
+
         :return: False if self.sets is empty, True if non-empty
         :rtype: bool
         """
@@ -291,7 +290,7 @@ class ClusterEnsemble:
     def __len__(self):
         """
         Number of ClusterSets in the ClusterEnsemble. Mirrors behaviour of sets.
-        
+
         :return: The length of self.sets
         :rtype: int
         """
@@ -418,7 +417,7 @@ class ClusterEnsemble:
         This is done by calling the + operator on the underlying ClusterSet objects.
         In doing so, it keeps track of which algorithms found the clusters.
         The best analogy for the result is a Venn diagram. The overlapping parts are where the algorithms agree. Unlike &, + also remembers where the algorithms disagree.
-        
+
         :param other: The other ClusterEnsemble to calculate the union with
         :type other: class:`clusterizer.ensemble.ClusterEnsemble`
 
@@ -441,13 +440,13 @@ class ClusterEnsemble:
         return result
 
     def most_confident(self):
-    """
-    Returns a ClusterEnsemble with for each ClusterSet in `self` the Clusters in that ClusterSet with the highest number of algorithms that found it.
-    Confidence doesn't have to be the same for each ClusterSet. For example, one ClusterSet could contain overlap while another is only found by one algorithm. In this case, for the first ClusterSet, only the overlap is returned, while for the second ClusterSet, it is returned in its entirety.
+        """
+        Returns a ClusterEnsemble with for each ClusterSet in `self` the Clusters in that ClusterSet with the highest number of algorithms that found it.
+        Confidence doesn't have to be the same for each ClusterSet. For example, one ClusterSet could contain overlap while another is only found by one algorithm. In this case, for the first ClusterSet, only the overlap is returned, while for the second ClusterSet, it is returned in its entirety.
 
-    :return: The Clusters in each ClusterSet with the highest number of algorithms that found it
-    :rtype: ClusterEnsemble
-    """
+        :return: The Clusters in each ClusterSet with the highest number of algorithms that found it
+        :rtype: ClusterEnsemble
+        """
         result = set()
         for clusterset in self:
             result.add(clusterset.most_confident())
