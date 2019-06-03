@@ -324,113 +324,113 @@ def cluster_boolean_series(series, max_consecutive_false=5, min_length=5, min_co
         clusters.add((cluster_start, cluster_end))
     return clusters
 
-def get_box_x(index,boxnumber,maxplace,locations):
-    return min(boxnumber-1,int(locations.iloc[index]*boxnumber/maxplace))
-    
-def get_box_y(index,boxnumber,maxtime,times):
-    return min(boxnumber-1,int(times.iloc[index]*boxnumber/maxtime))
-    
-def make_pdgrid(locations,times,placeinterval,timeinterval):
-    maxplace=max(locations)
-    maxtime=max(times)
-    boxesx=int(maxplace/placeinterval)
-    boxesy=int(maxtime/timeinterval)
-    grid=np.zeros((boxesx,boxesy))
-    datalength=len(locations)
-    for i in range(datalength):
-        grid[get_box_x(i,boxesx,maxplace,locations),get_box_y(i,boxesy,maxtime,times)]+=1
-    return grid
-    
-def track_groups(elt,todo,ijlist):
-    if elt in ijlist:
-        todo+=[elt]
-        ijlist.remove(elt)
-def group_boxes(grid,condition,sizex,sizey):
-    ijlist=[]
-    for i in range(sizex):
-        for j in range(sizey):
-            if grid[i,j]>=condition:
-                ijlist+=[[i,j]]
-    groups=[]
-    groupcount=0
-    for ij in ijlist:
-        groups+=[[ij]]
-        groupstart=True
-        todo=[ij]
-        ijlist.remove(ij)
-        while len(todo)>0:
-            for p in todo:
-                track_groups([p[0]+1,p[1]],todo,ijlist)
-                track_groups([p[0]-1,p[1]],todo,ijlist)
-                track_groups([p[0],p[1]+1],todo,ijlist)
-                track_groups([p[0],p[1]-1],todo,ijlist)
-                if groupstart==True:
-                    groupstart=False
-                else:
-                    groups[groupcount]+=[p] 
-                todo.remove(p)
-        groupcount+=1
-    return np.array(groups)
 
-def pinta(circuit,placeinterval=10,timeinterval=np.timedelta64(7,'D'),sensitivity=1,name="Pinta"):
+def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, 'D'), sensitivity=1.0, name="Pinta"):
     """Algorithm that identifies clusters by using the fact that a lot of 2D-bins have the same amount of partial discharges. If the "gap" between two bins is too high, it means there is something going on with the bin. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
-    :param timeinterval: time bin width (timedelta64)
-    :type timeinterval: numpy.timedelta64, optional
-
     :param placeinterval: place bin width (m)
     :type binLengthY: float, optional
 
-    :param sensitivity: The higher this value, the more clusters the algoritm will find.
+    :param timeinterval: time bin width (timedelta64)
+    :type timeinterval: numpy.timedelta64, optional
+
+    :param sensitivity: The higher this value, the more clusters the algorithm will find.
     :type minPts: float, optional
 
     :return: found clusters
     :rtype: set of class:`clusterizer.cluster.Cluster`
     """
-    
+    def get_box_x(index, boxnumber, maxplace, locations):
+        return min(boxnumber-1, int(locations.iloc[index]*boxnumber/maxplace))
+
+    def get_box_y(index, boxnumber, maxtime, times):
+        return min(boxnumber-1, int(times.iloc[index]*boxnumber/maxtime))
+
+    def make_pdgrid(locations, times, placeinterval, timeinterval):
+        maxplace = max(locations)
+        maxtime = max(times)
+        boxesx = int(maxplace/placeinterval)
+        boxesy = int(maxtime/timeinterval)
+        grid = np.zeros((boxesx, boxesy))
+        datalength = len(locations)
+        for i in range(datalength):
+            grid[get_box_x(i, boxesx, maxplace, locations), get_box_y(i, boxesy, maxtime, times)] += 1
+        return grid
+
+    def track_groups(elt, todo, ijlist):
+        if elt in ijlist:
+            todo += [elt]
+            ijlist.remove(elt)
+
+    def flood_fill(grid, condition, sizex, sizey):
+        ijlist = []
+        for i in range(sizex):
+            for j in range(sizey):
+                if grid[i, j] >= condition:
+                    ijlist += [[i, j]]
+        groups = []
+        groupcount = 0
+        for ij in ijlist:
+            groups += [[ij]]
+            groupstart = True
+            todo = [ij]
+            ijlist.remove(ij)
+            while len(todo) > 0:
+                for p in todo:
+                    track_groups([p[0]+1, p[1]], todo, ijlist)
+                    track_groups([p[0]-1, p[1]], todo, ijlist)
+                    track_groups([p[0], p[1]+1], todo, ijlist)
+                    track_groups([p[0], p[1]-1], todo, ijlist)
+                    if groupstart:
+                        groupstart = False
+                    else:
+                        groups[groupcount] += [p]
+                    todo.remove(p)
+            groupcount += 1
+        return np.array(groups)
+
+    invsensitivity = 1.0 / sensitivity
+
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    mintimes=min(times)
-    times-=mintimes
-    maxplace=max(locations)
-    maxtime=max(times)
+    mintimes = min(times)
+    times -= mintimes
+    maxplace = max(locations)
+    maxtime = max(times)
 
-    #create bins:
+    # create bins:
 
-    grid=make_pdgrid(locations,times,placeinterval,timeinterval)
-    
+    grid = make_pdgrid(locations, times, placeinterval, timeinterval)
+
     #determine the minimum amount of partial discharges needed for a bin to be part of a cluster
-    
-    Grid=grid
-    Grid=Grid.flatten()
-    Grid=np.sort(Grid)
-    gridlength=len(Grid)
-    ratio=np.zeros(gridlength)
-    for i in range(gridlength):
-        ratio[i]=Grid[i]-sensitivity*i
-    minval=Grid[np.argmin(ratio)]
-    
-    #group data
 
-    groups=group_boxes(grid,minval,int(maxplace/placeinterval),int(maxtime/timeinterval))
-    minplace=np.zeros(len(groups))
-    maxplace=np.zeros(len(groups))
-    mintime=np.empty(len(groups),dtype='datetime64[s]')
-    maxtime=np.empty(len(groups),dtype='datetime64[s]')
+    grid_flattened = grid.flatten()
+    grid_flattened = np.sort(grid_flattened)
+    gridlength = len(grid_flattened)
+    ratio = grid_flattened - invsensitivity * np.array(range(gridlength))
+
+    minval = grid_flattened[np.argmin(ratio)]
+
+    # group data
+
+    groups = flood_fill(grid, minval, int(maxplace/placeinterval), int(maxtime/timeinterval))
+    minplace = np.zeros(len(groups))
+    maxplace = np.zeros(len(groups))
+    mintime = np.empty(len(groups), dtype='datetime64[s]')
+    maxtime = np.empty(len(groups), dtype='datetime64[s]')
     for i in range(len(groups)):
-        minc=np.amin(groups[i],axis=0)
-        maxc=np.amax(groups[i],axis=0)
-        minplace[i]=minc[0]*placeinterval
-        maxplace[i]=(maxc[0]+1)*placeinterval
-        mintime[i]=mintimes+minc[1]*timeinterval
-        maxtime[i]=mintimes+(maxc[1]+1)*timeinterval
-    clusters=set(Cluster(location_range=(minplace[i],maxplace[i]),time_range=(mintime[i],maxtime[i]),found_by=[name]) for i in range(len(groups)))
+        minc = np.amin(groups[i], axis=0)
+        maxc = np.amax(groups[i], axis=0)
+        minplace[i] = minc[0]*placeinterval
+        maxplace[i] = (maxc[0]+1)*placeinterval
+        mintime[i] = mintimes+minc[1]*timeinterval
+        maxtime[i] = mintimes+(maxc[1]+1)*timeinterval
+    clusters = set(Cluster(location_range=(minplace[i], maxplace[i]), time_range=(mintime[i], maxtime[i]), found_by=[name]) for i in range(len(groups)))
     return clusters
 
-##END OF PINTA ALGORITHM
 
 def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01, name="DBSCAN"):
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
