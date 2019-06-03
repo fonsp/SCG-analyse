@@ -432,7 +432,7 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
     return clusters
 
 
-def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01, name="DBSCAN"):
+def clusterize_DBSCAN(circuit, binLengthX=2, binLengthY=1, epsilon=3, minPts=125, shave=0.01, name="DBSCAN"):
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
@@ -473,32 +473,32 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     endtime = times2[len(circuit.pd)-1].value/1000000000/60/60/24/7/binLengthY
     endlocation = circuit.circuitlength
     bins = (int(endlocation/binLengthX), int(endtime-starttime))
-    ranges = ((0,endlocation),(starttime,endtime))
+    ranges = ((0, endlocation), (starttime, endtime))
     bins = np.asarray(bins).astype(np.int64)
     ranges = np.asarray(ranges).astype(np.float64)
-    edges = (np.linspace(*ranges[0,:], bins[0]+1), np.linspace(*ranges[1,:], bins[1]+1))
-    cuts = (vals[0]>=ranges[0,0]) & (vals[0]<ranges[0,1]) & (vals[1]>=ranges[1,0]) & (vals[1]<ranges[1,1])
-    c = ((vals[0,cuts] - ranges[0,0]) / (ranges[0,1] - ranges[0,0]) * bins[0]).astype(np.int_)
-    c += bins[0]*((vals[1,cuts] - ranges[1,0]) / (ranges[1,1] - ranges[1,0]) * bins[1]).astype(np.int_)
+    edges = (np.linspace(*ranges[0, :], bins[0]+1), np.linspace(*ranges[1, :], bins[1]+1))
+    cuts = (vals[0] >= ranges[0, 0]) & (vals[0] < ranges[0, 1]) & (vals[1] >= ranges[1, 0]) & (vals[1] < ranges[1, 1])
+    c = ((vals[0, cuts] - ranges[0, 0]) / (ranges[0, 1] - ranges[0, 0]) * bins[0]).astype(np.int_)
+    c += bins[0]*((vals[1, cuts] - ranges[1, 0]) / (ranges[1, 1] - ranges[1, 0]) * bins[1]).astype(np.int_)
     weights = np.bincount(c, minlength=bins[0]*bins[1]).reshape(*bins)
 
     # reshaping and scaling the data to fit DBSCAN
-    weights = weights.reshape(bins[0]*bins[1],1)
-    data = np.mgrid[0:bins[1], 0:bins[0]].reshape(2,-1).T.astype(np.float64)
-    data[:,[0, 1]] = data[:,[1, 0]]
-    weightedData = np.concatenate((data,weights), axis = 1)
+    weights = weights.reshape(bins[0]*bins[1], 1)
+    data = np.mgrid[0:bins[1], 0:bins[0]].reshape(2, -1).T.astype(np.float64)
+    data[:, [0, 1]] = data[:, [1, 0]]
+    weightedData = np.concatenate((data, weights), axis=1)
 
     # removing empty bins
     weightedDataNoZero = np.array([row for row in weightedData if row[2] > 0])
 
     # DBSCAN
-    labels = DBSCAN(eps=epsilon, min_samples=minPts).fit(weightedDataNoZero[:, [0,1]], sample_weight = weightedDataNoZero[:, 2] ).labels_
+    labels = DBSCAN(eps=epsilon, min_samples=minPts).fit(weightedDataNoZero[:, [0, 1]], sample_weight=weightedDataNoZero[:, 2]).labels_
 
     # rescaling the data
-    weightedDataNoZero[:,2] = labels
-    weightedDataNoZero[:,0] *= endlocation/bins[0]
-    weightedDataNoZero[:,0] += endlocation/bins[0]/2
-    weightedDataNoZero[:,1] += (starttime + (endtime-starttime)/bins[1]/2)
+    weightedDataNoZero[:, 2] = labels
+    weightedDataNoZero[:, 0] *= endlocation/bins[0]
+    weightedDataNoZero[:, 0] += endlocation/bins[0]/2
+    weightedDataNoZero[:, 1] += (starttime + (endtime-starttime)/bins[1]/2)
 
     # make "rough" clusters
     clusterAmount = len(set(labels))-1
@@ -511,8 +511,8 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     # fit the clusters by shaving a small amount of points from the edges
     clusters2 = set()
     for cluster in clusters:
-        locationIndex = locations[locations>=cluster.location_range[0]][locations<=cluster.location_range[1]].index
-        timeIndex = times[times>=cluster.time_range[0]][times<=cluster.time_range[1]].index
+        locationIndex = locations[locations >= cluster.location_range[0]][locations <= cluster.location_range[1]].index
+        timeIndex = times[times >= cluster.time_range[0]][times <= cluster.time_range[1]].index
         index = [point for point in locationIndex if point in timeIndex]
         locations2 = locations.loc[index].sort_values()
         beginLoc = locations2.iloc[int(len(locations2)*shave)+1]
@@ -532,7 +532,7 @@ def clusterize_ensemble(circuit, algorithms=None, add=True):
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.Circuit`
 
-    :param algorithms: List of algorithms (methods from this submodule) to be used. Defaults to [clusterize_poisson, clusterize_DBSCAN].
+    :param algorithms: List of algorithms (methods from this submodule) to be used. Defaults to [clusterize_poisson, clusterize_DBSCAN, clusterize_pinta].
     :type algorithms: iterable, optional
 
     :param add: Set to true to __add__ (+) the clusters together, set to false to __or__ (|) them together
@@ -540,7 +540,7 @@ def clusterize_ensemble(circuit, algorithms=None, add=True):
     """
     result = ClusterEnsemble(set())
     if algorithms is None:
-        algorithms = [clusterize_poisson, clusterize_DBSCAN]
+        algorithms = [clusterize_poisson, clusterize_DBSCAN, clusterize_pinta]
     for alg in algorithms:
         clusters = alg(circuit)
         if add:
