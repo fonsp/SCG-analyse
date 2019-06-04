@@ -132,8 +132,48 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
         ax.set_xlabel("Time")
     ax.set_title("Circuit {0}, from {1} meter to {2} meter".format(circuit.circuitnr, round(partial_discharges[location_column][partial_discharges.index[0]], 1), round(partial_discharges[location_column][partial_discharges.index[-1]], 1)))
     ax.set_ylabel("Number of PDs")
+'''
+def overlay_cable_config(circuit, ax=None, line_width=None,  joint_diff_colors=False, only_rmu=False,add_to_legend=False):   
+    """Draw colored lines for every object in the circuit cableconfig. Useful when the same axis was used to draw a location time scatter plot.
+    Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
+    :param circuit: Circuit object containing warning series to plot
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
+    :param ax: Axes to draw on. Defaults to `plt.gca()`
+    :type ax: class:`matplotlib.axes.Axes`, optional
+
+    :param line_width: Width of joint line. Defaults to 1% of circuit length.
+    :type line_width: float, optional
+
+    :param add_to_legend: Label joint colors?
+    :type add_to_legend: bool, optional
+    """
+    if ax is None:
+        ax = plt.gca()
+#    jointcolors = {'unknown': 'yellow', 'oil': 'orange', 'heat shrink': 'red', 'cold shrink': 'green'}
+        
+    
+    
+    cableconfig = circuit.cableconfig
+    type_col, length_col, cum_length_col = cableconfig.columns
+    
+    jointcolors = {}
+    rmu = cableconfig[cableconfig[type_col]=="RMU"]
+    joints = cableconfig[ cableconfig[type_col].str.startswith("Joint") ]
+    if(joint_diff_colors):
+        for joint in joints:
+            if(!joint[type_col] in jointcolors):
+                jointcolors.add()
+            ax.axvline(x=joint[cum_length_col], color=jointcolors[joint[type_col]], line_width=line_width if line_width!=None, label=joint[type_col] if add_to_legend)
+                
+    else:
+        for joint_loc in joints[cum_length_col]:
+            ax.axvline(x=joint_loc,color="red",line_width=line_width if line_width !=None)
+    for rmu_loc in rmu[cum_length_col]:
+        ax.axvline(x=rmu_loc,color="blue",line_width=line_width ifline_width !=None)
+    
+'''
 def overlay_warnings(circuit, ax=None, opacity=.2, line_width=None, add_to_legend=True):
     """Draw colored lines for every warning in the circuit. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
@@ -295,3 +335,4 @@ def legend_without_duplicate_labels(ax=None):
     ct = lambda h: tuple(h.get_facecolor()[0])
     unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i] or ct(h) not in map(ct, handles[:i])]
     ax.legend(*zip(*unique))
+
