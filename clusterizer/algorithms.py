@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.stats
 import functools
+import operator
 from clusterizer.rectangle import Rectangle
 from clusterizer.ensemble import ClusterEnsemble
 from clusterizer.cluster import Cluster
@@ -534,6 +535,7 @@ def clusterize_ensemble_additive(circuit, algorithms=None, add=True):
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.Circuit`
 
+
     :param algorithms: List of algorithms (methods from this submodule) to be used. Defaults to [clusterize_poisson, clusterize_DBSCAN, clusterize_pinta].
     :type algorithms: iterable, optional
 
@@ -556,7 +558,7 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, rectangle_width=N
     """
     A clusterizer 'algorithm' that creates a Cluster for each warning given by DNV GL.
 
-    :param circuit: The circuit the clusterize.
+    :param circuit: The circuit to clusterize.
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param include_noise_warnings: When set to False, "Noise" warnings are skipped, and only level 1-3 warnings are converted.
@@ -576,3 +578,62 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, rectangle_width=N
         if include_noise_warnings or not level == "N":
             warning_rectangles.add(Rectangle.from_circuit_warning(circuit, i, rectangle_width=rectangle_width))
     return ClusterEnsemble(Cluster({r}) for r in warning_rectangles)
+
+def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size=32, time_rect_size=np.timedelta64(6, 'D'), name="Monte Carlo"):
+    """
+    Randomized Monte Carlo algorithm.
+    Uses random PD choices to determine Clusters. Number of PDs is influenced by circuit length, total recorded circuit time and choices_div.
+    Each random PD gets its own Rectangle of size loc_rect_size * time_rect_size.
+    Takes the __or__ (|) over all Rectangles and looks at how many PDs are associated with the result.
+    If there are enough (influenced by circuit length, total recorded circuit time and choices_div*found_div), the Cluster is accepted as valid
+    
+    Increasing choices_div makes the algorithm stricter
+    Increasing found_div makes the algorithm more lenient
+    
+    :param circuit: The circuit to clusterize
+    :type circuit: class:`clusterizer.circuit.MergedCircuit`
+
+    :param choices_div: Magic factor that determines how many random choices are made
+    :type choices_div: int, optional
+    
+    :param found_div: Magic factor that determines how many random PDs need to have found a cluster before it is seen as abnormal
+    :type found_div: int, optional
+
+    :param loc_rect_size: The size of rectangles in the location dimension
+    :type loc_rect_size: int, optional
+
+    :param time_rect_size: The size of rectangles in the time dimension
+    :type time_rect_size: class:`numpy.timedelta64`, optional
+
+    :param name: The name of the algorithm
+    :type name: string, optional
+
+    :return: found clusters
+    :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
+    """
+    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
+    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    
+    time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
+    num = int(circuit.circuitlength * time_factor)
+    chosen_pds = np.random.randint(len(locations), size=num // choices_div)
+    chosen_locations = locations.iloc[chosen_pds].values
+    chosen_times = times.iloc[chosen_pds].values
+
+    xlength = loc_rect_size // 2
+    ylength = time_rect_size // 2    
+    rectangles = set()
+    for i, point in enumerate(zip(chosen_locations, chosen_times)):
+        rectangles.add(Rectangle(
+            location_range=(point[0]-xlength/2, point[0]+xlength/2),\
+            time_range=(point[1]-ylength/2, point[1]+ylength/2),\
+            found_by={str(i)}))
+
+    clusters = {ClusterEnsemble({Cluster({r})}) for r in rectangles}
+    reduced = functools.reduce(operator.__or__, clusters)
+    highly_found = [x for x in reduced if len(x.found_by) > num // (choices_div*found_div)]
+    result = set()
+    for c in highly_found:
+        for r in c:
+            r.found_by = {name}
+    return highly_found
