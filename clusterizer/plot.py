@@ -36,11 +36,11 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, d
     """
     if ax is None:
         ax = plt.gca()
-    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else None
+    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else ""
 
-    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured]
-    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured]
-    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured]
+    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured].values
+    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured].values
+    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured].values
     if dot_size_to_charge_ratio is None:
         ax.scatter(x=locations, y=times, s=3, c=dot_colors, marker='8', edgecolors="none")
     else:
@@ -177,15 +177,15 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
-    overlay_cluster_collection(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
+    overlay_cluster_ensemble(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
-def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
     """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
-    :param circuit: Cluster objects with time or location bounds defined.
-    :type circuit: list of class:`clusterizer.cluster.Cluster`
+    :param circuit: Set of Clusters to draw.
+    :type circuit: object of class:`clusterizer.cluster.ClusterEnsemble`
 
     :param ax: Axes to draw on. Defaults to `plt.gca()`
     :type ax: class:`matplotlib.axes.Axes`, optional
@@ -205,15 +205,44 @@ def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.3, scale_
     :param label: A custom legend label, overrides default labeling
     :type label: str, optional
     """
-    for c in clusters:
+    for c in cluster_ensemble:
         overlay_cluster(c, ax, color, opacity, scale_opacity_by_found_by_count=scale_opacity_by_found_by_count, add_to_legend=add_to_legend, label=label)
 
 
-def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
-    """Draw a shaded rectangle matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
-
+def overlay_cluster(cluster, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+    """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
+    Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`
+    
     :param cluster: Cluster object with time or location bounds defined.
     :type cluster: class:`clusterizer.cluster.Cluster`
+
+    :param ax: Axes to draw on. Defaults to `plt.gca()`
+    :type ax: class:`matplotlib.axes.Axes`, optional
+
+    :param color: Fill color
+    :type color: color, optional
+
+    :param opacity: Fill opacity (1=opaque; 0=invisible)
+    :type opacity: float, optional
+
+    :param scale_opacity_by_found_by_count: When set to True, the draw opacity equals: `opacity * len(cluster.found_by)`.
+    :type scale_opacity_by_found_by_count: True
+
+    :param add_to_legend: Use the clusters' 'found_by' set as legend label?
+    :type add_to_legend: bool, optional
+
+    :param label: A custom legend label, overrides default labeling
+    :type label: str, optional
+    """
+    for r in cluster:
+        overlay_rectangle(r, ax, color, opacity, scale_opacity_by_found_by_count=scale_opacity_by_found_by_count, add_to_legend=add_to_legend, label=label)
+
+
+def overlay_rectangle(rectangle, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+    """Draw a shaded rectangle matching the rectangle dimensions. Useful when the same axis was used to draw a location time scatter plot.
+
+    :param rectangle: Rectangle object with time or location bounds defined.
+    :type rectangle: class:`clusterizer.cluster.Rectangle`
 
     :param ax: Axes to draw on. Defaults to `plt.gca()`
     :type ax: class:`matplotlib.axes.Axes`, optional
@@ -233,17 +262,17 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_f
     :param label: A custom legend label, overrides default labeling
     :type label: str, optional
     """
-    if cluster is None:
+    if rectangle is None:
         return
     if ax is None:
         ax = plt.gca()
 
     # TODO: warn user when overlaying an empty plot
-    show_date = cluster.time_range is not None and axis_is_in_datetime_format(ax.yaxis)
+    show_date = rectangle.time_range is not None and axis_is_in_datetime_format(ax.yaxis)
 
     clabel = None
-    if add_to_legend:
-        clabel = "Found by {}".format("; ".join(sorted(cluster.found_by)))
+    if add_to_legend and rectangle.found_by:
+        clabel = "Found by {}".format("; ".join(rectangle.found_by))
     if label is not None:
         clabel = label
 
@@ -251,10 +280,10 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_f
         color = generate_color_from_string(clabel)
 
     if scale_opacity_by_found_by_count:
-        opacity = np.min([1.0, opacity * len(cluster.found_by)])
+        opacity = np.min([1.0, opacity * len(rectangle.found_by)])
 
-    loc = list(cluster.location_range)
-    dates = cluster.time_range
+    loc = list(rectangle.location_range)
+    dates = rectangle.time_range
     if show_date:
         overlay_boolean_series([True, True], loc=loc, ax=ax, y1=dates[0], y2=dates[1], color=color, opacity=opacity, label=clabel)
     else:
@@ -356,7 +385,8 @@ def generate_color_from_string(s, matplotlib_color_map_name="rainbow", superprim
             matches.append(dbblue)
         if any(x in sl for x in ["dennis", "pinta", "paint"]):
             matches.append(pintayellow)
-        return tuple(sum(matches) / len(matches))
+        if matches:
+            return tuple(sum(matches) / len(matches))
 
     def str2int(s):
         if s is None or s == "":
