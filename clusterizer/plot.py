@@ -2,7 +2,8 @@ import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from . import cluster
+from . import algorithms
+import functools
 
 
 def axis_is_in_datetime_format(axis):
@@ -12,7 +13,7 @@ def axis_is_in_datetime_format(axis):
     return type(axis.get_major_formatter()) == pd.plotting._converter.PandasAutoDateFormatter
 
 
-def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, dot_colors="black"):
+def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, dot_colors="black", add_to_legend=False, set_title=True):
     """Draw a location (x) vs time (y) scatter plot.
 
     :param circuit: Circuit object containing PD series to plot
@@ -27,22 +28,31 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=1e4, d
     :param dot_colors: A single color or a list of colors to use as dot colors.
     :type dot_colors: color, optional
 
+    :param add_to_legend: Label circuit number?
+    :type add_to_legend: bool, optional
+
+    :param set_title: When True, axis title will be set to 'Circuit ~circuitnr~'.
+    :type set_title: bool
     """
     if ax is None:
         ax = plt.gca()
+    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else ""
 
-    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured]
-    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured]
-    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured]
+    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured].values
+    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured].values
+    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured].values
     if dot_size_to_charge_ratio is None:
-        ax.scatter(x=locations, y=times, s=0.1, c=dot_colors)
+        ax.scatter(x=locations, y=times, s=0.1, c=dot_colors, marker='8', edgecolors="none")
     else:
-        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label="Circuit {0}".format(circuit.circuitnr))
+        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label=label, marker='8', edgecolors="none")
+
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Date")
+    if set_title:
+        ax.set_title("Circuit {0}".format(circuit.circuitnr))
 
 
-def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='black'):
+def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='black', add_to_legend=False, set_title=True):
     """Draw a histogram of PD locations.
 
     :param circuit: Circuit object containing PD series to plot
@@ -60,6 +70,12 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
     :param color: Bar color
     :type color: color, optional
 
+    :param add_to_legend: Label circuit number?
+    :type add_to_legend: bool, optional
+
+    :param set_title: When True, axis title will be set to 'Circuit ~circuitnr~'.
+    :type set_title: bool
+
     :return: Array of histogram values, corresponding to accumulated bin content.
     :rtype: numpy.ndarray
     """
@@ -70,13 +86,16 @@ def draw_location_hist(circuit, weigh_charges=False, ax=None, bins=None, color='
     hist_weights = None
     if weigh_charges:
         hist_weights = circuit.pd["Charge (picocoulomb)"]
+    label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else None
 
-    counts, _, _ = ax.hist(circuit.pd["Location in meters (m)"], weights=hist_weights, bins=bins, color=color, label="Circuit {0}".format(circuit.circuitnr))
+    counts, _, _ = ax.hist(circuit.pd["Location in meters (m)"], weights=hist_weights, bins=bins, color=color, label=label)
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Number of PDs")
+    if set_title:
+        ax.set_title("Circuit {0}".format(circuit.circuitnr))
 
 
-def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=None, bins=None, sort=False, color='black'):
+def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=None, bins=None, sort=False, color='black', set_title=True):
     """
     Draw a histogram, binning partial discharges along the time dimension.
 
@@ -100,6 +119,9 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
 
     :param color: Bar color
     :type color: color, optional
+
+    :param set_title: When True, axis title will be set to 'Circuit ~circuitnr~'.
+    :type set_title: bool
     """
     if ax is None:
         ax = plt.gca()
@@ -132,9 +154,11 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
         ax.set_xlabel("Time")
     ax.set_title("Circuit {0}, from {1} meter to {2} meter".format(circuit.circuitnr, round(partial_discharges[location_column][partial_discharges.index[0]], 1), round(partial_discharges[location_column][partial_discharges.index[-1]], 1)))
     ax.set_ylabel("Number of PDs")
+    if set_title:
+        ax.set_title("Circuit {0}".format(circuit.circuitnr))
 
 
-def overlay_warnings(circuit, ax=None, opacity=.2, line_width=None, add_to_legend=True):
+def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legend=True):
     """Draw colored lines for every warning in the circuit. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
@@ -153,27 +177,15 @@ def overlay_warnings(circuit, ax=None, opacity=.2, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
-    if circuit.warning is None or circuit.warning.empty or len(circuit.warning) == 0:
-        return
-    if ax is None:
-        ax = plt.gca()
-
-    # Using str key in dict instead of int to support 'Noise' warning
-    warningcolors = {'1': 'yellow', '2': 'orange', '3': 'red', 'N': 'green'}
-
-    for i, w in circuit.warning.sort_values(by=['SCG warning level (1 to 3 or Noise)']).iterrows():
-        level = str(w["SCG warning level (1 to 3 or Noise)"])
-
-        cluster_created_from_warning = cluster.Cluster.from_circuit_warning(circuit, i, cluster_width=line_width)
-        overlay_cluster(cluster_created_from_warning, ax=ax, color=warningcolors[level], opacity=opacity, add_to_legend=add_to_legend)
+    overlay_cluster_ensemble(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
-def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.2, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
     """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
-    :param circuit: Cluster objects with time or location bounds defined.
-    :type circuit: list of class:`clusterizer.cluster.Cluster`
+    :param circuit: Set of Clusters to draw.
+    :type circuit: object of class:`clusterizer.cluster.ClusterEnsemble`
 
     :param ax: Axes to draw on. Defaults to `plt.gca()`
     :type ax: class:`matplotlib.axes.Axes`, optional
@@ -193,15 +205,44 @@ def overlay_cluster_collection(clusters, ax=None, color=None, opacity=.2, scale_
     :param label: A custom legend label, overrides default labeling
     :type label: str, optional
     """
-    for c in clusters:
+    for c in cluster_ensemble:
         overlay_cluster(c, ax, color, opacity, scale_opacity_by_found_by_count=scale_opacity_by_found_by_count, add_to_legend=add_to_legend, label=label)
 
 
-def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
-    """Draw a shaded rectangle matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
+def overlay_cluster(cluster, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+    """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
+    Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`.
 
     :param circuit: Cluster object with time or location bounds defined.
-    :type circuit: class:`clusterizer.cluster.Cluster`
+    :type circuit: object of class:`clusterizer.cluster.Cluster`
+
+    :param ax: Axes to draw on. Defaults to `plt.gca()`
+    :type ax: class:`matplotlib.axes.Axes`, optional
+
+    :param color: Fill color
+    :type color: color, optional
+
+    :param opacity: Fill opacity (1=opaque; 0=invisible)
+    :type opacity: float, optional
+
+    :param scale_opacity_by_found_by_count: When set to True, the draw opacity equals: `opacity * len(cluster.found_by)`.
+    :type scale_opacity_by_found_by_count: True
+
+    :param add_to_legend: Use the clusters' 'found_by' set as legend label?
+    :type add_to_legend: bool, optional
+
+    :param label: A custom legend label, overrides default labeling
+    :type label: str, optional
+    """
+    for r in cluster:
+        overlay_rectangle(r, ax, color, opacity, scale_opacity_by_found_by_count=scale_opacity_by_found_by_count, add_to_legend=add_to_legend, label=label)
+
+
+def overlay_rectangle(rectangle, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
+    """Draw a shaded rectangle matching the rectangle dimensions. Useful when the same axis was used to draw a location time scatter plot.
+
+    :param rectangle: Rectangle object with time or location bounds defined.
+    :type rectangle: class:`clusterizer.cluster.Rectangle`
 
     :param ax: Axes to draw on. Defaults to `plt.gca()`
     :type ax: class:`matplotlib.axes.Axes`, optional
@@ -221,25 +262,28 @@ def overlay_cluster(cluster, ax=None, color=None, opacity=.2, scale_opacity_by_f
     :param label: A custom legend label, overrides default labeling
     :type label: str, optional
     """
-    if cluster is None:
+    if rectangle is None:
         return
     if ax is None:
         ax = plt.gca()
 
     # TODO: warn user when overlaying an empty plot
-    show_date = cluster.time_range is not None and axis_is_in_datetime_format(ax.yaxis)
+    show_date = rectangle.time_range is not None and axis_is_in_datetime_format(ax.yaxis)
 
     clabel = None
-    if add_to_legend:
-        clabel = "Found by {}".format(cluster.found_by)
+    if add_to_legend and rectangle.found_by:
+        clabel = "Found by {}".format("; ".join(rectangle.found_by))
     if label is not None:
         clabel = label
 
-    if scale_opacity_by_found_by_count:
-        opacity = np.min([1.0, opacity * len(cluster.found_by)])
+    if color is None:
+        color = generate_color_from_string(clabel)
 
-    loc = list(cluster.location_range)
-    dates = cluster.time_range
+    if scale_opacity_by_found_by_count:
+        opacity = np.min([1.0, opacity * len(rectangle.found_by)])
+
+    loc = list(rectangle.location_range)
+    dates = rectangle.time_range
     if show_date:
         overlay_boolean_series([True, True], loc=loc, ax=ax, y1=dates[0], y2=dates[1], color=color, opacity=opacity, label=clabel)
     else:
@@ -286,6 +330,78 @@ def overlay_boolean_series(values, loc=None, ax=None, y1=None, y2=None, color='y
     ax.set_ylim(ymin, ymax)
 
 
+def generate_color_from_string(s, matplotlib_color_map_name="rainbow", superprime=111, supermod=101, magicoffset=13):
+    """Converts any string to a matplotlib color by applying a 'hash'.
+
+    The default parameters have the special property that:
+    - 'Found by DNV GL warning 1' is mapped to _yellow_.
+    - 'Found by DNV GL warning 2' is mapped to _orange_.
+    - 'Found by DNV GL warning 3' is mapped to _red_.
+    - 'Found by DNV GL warning N' is mapped to _light green_.
+
+    ---
+
+    **Implementation:**
+
+    String to integer:
+        `i = (all bytes in s, casted as single integer)`
+    specifically:
+        `i = functools.reduce(lambda a, b: a*256 + b, map(ord, s))`
+
+    Integer to rational ∈ [0,1):
+        `r = ( ((i + magicoffset) * superprime) % supermod ) / supermod`
+
+    Rational to color:
+        `color = color_map(r)`
+
+    :param s: String to convert
+    :type s: str
+
+    :param matplotlib_color_map_name: See [matplotlib docs](https://matplotlib.org/tutorials/colors/colormaps.html) for choosing a colormap.
+    :type matplotlib_color_map_name: str, optional
+
+    :param superprime: See implementation above.
+    :type superprime: int, optional
+
+    :param supermod: See implementation above.
+    :type supermod: int, optional
+
+    :param magicoffset: See implementation above.
+    :type magicoffset: int, optional
+    """
+
+    # Quick fix
+
+    poissonred = np.array([255, 126, 126, 255])/255.0
+    dbblue = np.array([126, 206, 255, 255])/255.0
+    pintayellow = np.array([255, 230, 69, 255])/255.0
+
+    sl = s.lower()
+    if sl.startswith("found by"):
+        matches = []
+        if "poisson" in sl:
+            matches.append(poissonred)
+        if "dbscan" in sl:
+            matches.append(dbblue)
+        if any(x in sl for x in ["dennis", "pinta", "paint"]):
+            matches.append(pintayellow)
+        if matches:
+            return tuple(sum(matches) / len(matches))
+
+    def str2int(s):
+        if s is None or s == "":
+            return 0
+        return functools.reduce(lambda a, b: a*256 + b, map(ord, s))
+
+    def hash(i):
+        return ((i + magicoffset) * superprime) % supermod
+
+    cmap = plt.cm.get_cmap(matplotlib_color_map_name)
+
+    r = hash(str2int(s)) / supermod
+    return cmap(r)
+
+
 def legend_without_duplicate_labels(ax=None):
     """Same as `ax.legend()`, but ignores duplicate labels."""
 
@@ -295,3 +411,35 @@ def legend_without_duplicate_labels(ax=None):
     ct = lambda h: tuple(h.get_facecolor()[0])
     unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i] or ct(h) not in map(ct, handles[:i])]
     ax.legend(*zip(*unique))
+
+
+def save_figure_for_latex(filename, reset_size=True):
+    """Slaat het laatste gebruikte `figure` (waar alle `Axes` in zitten) op als .pdf. De grootte van de figure wordt veranderd naar een standaardgrootte."""
+    fig = plt.gcf()
+
+    if reset_size:
+        fig.set_size_inches((8, 5))
+    if not filename.endswith(".pdf"):
+        filename = filename + ".pdf"
+
+    fig.savefig(filename)
+
+    if "/" not in filename:
+        filename = "/notebooks/" + filename
+    print("Saved to "+filename)
+
+
+def save_figure_for_google_slides(filename, reset_size=True, dpi=600):
+    """Slaat het laatste gebruikte `figure` (waar alle `Axes` in zitten) op als .png. De grootte van de figure wordt veranderd naar een standaardgrootte."""
+    fig = plt.gcf()
+
+    if reset_size:
+        fig.set_size_inches((8, 5))
+    if not filename.endswith(".png"):
+        filename = filename + ".png"
+
+    fig.savefig(filename, dpi=dpi)
+
+    if "/" not in filename:
+        filename = "/notebooks/" + filename
+    print("Saved to "+filename)
