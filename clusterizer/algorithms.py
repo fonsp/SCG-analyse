@@ -502,6 +502,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     
     # rescaling the data
     clusterAmount = len(set(labels))-1
+    weightedDataNoZero[:, 2] = labels
     weightedDataNoZero[:,0] *= endlocation/bins[0]
     weightedDataNoZero[:,0] += endlocation/bins[0]/2
     weightedDataNoZero[:,1] += (starttime + (endtime-starttime)/bins[1]/2)
