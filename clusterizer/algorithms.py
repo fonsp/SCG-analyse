@@ -432,7 +432,7 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
     return clusters
 
 
-def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01):
+def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01, name="DBSCAN"):
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters: 
 
     :param circuit: The circuit the clusterize.
@@ -511,7 +511,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     locUpper = [max([row[0] for row in weightedDataNoZero if row[3] == i]) + endlocation/bins[0]/2 for i in range(clusterAmount)]
     timeLower = [np.datetime64(int((min([row[1] for row in weightedDataNoZero if row[3] == i]) - ((endtime-starttime)/bins[1]/2))*60*60*24*7*binLengthY), 's') for i in range(clusterAmount)]
     timeUpper = [np.datetime64(int((max([row[1] for row in weightedDataNoZero if row[3] == i]) + ((endtime-starttime)/bins[1]/2))*60*60*24*7*binLengthY), 's') for i in range(clusterAmount)]
-    clusters = set(Cluster(location_range=(locLower[i], locUpper[i]), time_range=(timeLower[i], timeUpper[i])) for i in range(clusterAmount))
+    clusters = set(Cluster(location_range=(locLower[i], locUpper[i]), time_range=(timeLower[i], timeUpper[i]), found_by=[name]) for i in range(clusterAmount))
     
     # fit the clusters by shaving a small amount of points from the edges
     clusters2 = set()
@@ -524,8 +524,8 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
         endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
         beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
         endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]]) 
-        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime)))
-    return clusters, clusters2, weightedDataNoZero, weights
+        clusters2.add(Cluster(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
+    return clusters2
 
 
 def clusterize_ensemble(circuit, algorithms=None, add=True):
