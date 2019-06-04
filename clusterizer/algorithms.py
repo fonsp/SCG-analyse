@@ -205,6 +205,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
                                         weights=charges_in_nuster if weigh_charges else None,
                                         check_inside_bounds=False)
 
+
     # %% Discretize in second dimension
     found_2d_rectangles = set()
 
@@ -215,6 +216,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         if weigh_charges:
             charges_in_loc_rectangle = charges[in_current_loc_rectangle]
         # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_rectangle.location_range)], bins=time_bins)
+
         clust_counts = faster_histogram_1d(times_in_loc_rectangle,
                                            bins_start=min(times),
                                            bin_width=time_bin_size,
@@ -233,7 +235,6 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         found_ratio[np.isnan(found_ratio)] = 0.0
 
         is_suspiciously_high_ratio = found_ratio > magic_factor * nominal_ratio
-
         for start_index, end_index in group_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
             time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
@@ -346,29 +347,13 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
     """
-    def get_box_x(index, boxnumber, maxplace, locations):
-        return min(boxnumber-1, int(locations.iloc[index]*boxnumber/maxplace))
-
-    def get_box_y(index, boxnumber, maxtime, times):
-        return min(boxnumber-1, int(times.iloc[index]*boxnumber/maxtime))
-
-    def make_pdgrid(locations, times, placeinterval, timeinterval):
-        maxplace = max(locations)
-        maxtime = max(times)
-        boxesx = int(maxplace/placeinterval)
-        boxesy = int(maxtime/timeinterval)
-        grid = np.zeros((boxesx, boxesy))
-        datalength = len(locations)
-        for i in range(datalength):
-            grid[get_box_x(i, boxesx, maxplace, locations), get_box_y(i, boxesy, maxtime, times)] += 1
-        return grid
-
     def track_groups(elt, todo, ijlist):
         if elt in ijlist:
             todo += [elt]
             ijlist.remove(elt)
 
-    def flood_fill(grid, condition, sizex, sizey):
+    def flood_fill(grid, condition):
+        sizex, sizey = grid.shape
         ijlist = []
         for i in range(sizex):
             for j in range(sizey):
@@ -387,10 +372,9 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
                     track_groups([p[0]-1, p[1]], todo, ijlist)
                     track_groups([p[0], p[1]+1], todo, ijlist)
                     track_groups([p[0], p[1]-1], todo, ijlist)
-                    if groupstart:
-                        groupstart = False
-                    else:
+                    if not groupstart:
                         groups[groupcount] += [p]
+                    groupstart = False
                     todo.remove(p)
             groupcount += 1
         return np.array(groups)
@@ -399,14 +383,20 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    mintimes = min(times)
-    times -= mintimes
-    maxplace = max(locations)
-    maxtime = max(times)
+    mintime = times.values[0]
+    maxplace = circuit.circuitlength
+    maxtime = times.values[-1]
 
     # create bins:
 
-    grid = make_pdgrid(locations, times, placeinterval, timeinterval)
+    times_float = times.values.astype(float)
+
+    mintime_float = float(mintime)
+    maxtime_float = float(maxtime)
+
+    loc_bins = np.arange(0, maxplace, placeinterval)
+    time_bins = np.arange(mintime_float, maxtime_float, float(np.timedelta64(timeinterval, "ns")))
+    grid, _, _ = np.histogram2d(locations, times_float, bins=[loc_bins, time_bins])
 
     #determine the minimum amount of partial discharges needed for a bin to be part of a cluster
 
@@ -419,54 +409,56 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     # group data
 
-    groups = flood_fill(grid, minval, int(maxplace/placeinterval), int(maxtime/timeinterval))
-    minplace = np.zeros(len(groups))
-    maxplace = np.zeros(len(groups))
-    mintime = np.empty(len(groups), dtype='datetime64[s]')
-    maxtime = np.empty(len(groups), dtype='datetime64[s]')
+    groups = flood_fill(grid, minval)
+    minplacezzzzz = np.zeros(len(groups))
+    maxplacezzzzz = np.zeros(len(groups))
+    mintimezzzzz = np.empty(len(groups), dtype='datetime64[s]')
+    maxtimezzzzz = np.empty(len(groups), dtype='datetime64[s]')
     for i in range(len(groups)):
+        # groups[0] = [[1,20],[3,3],[5,5]]
+        # minc =
         minc = np.amin(groups[i], axis=0)
         maxc = np.amax(groups[i], axis=0)
-        minplace[i] = minc[0]*placeinterval
-        maxplace[i] = (maxc[0]+1)*placeinterval
-        mintime[i] = mintimes+minc[1]*timeinterval
-        maxtime[i] = mintimes+(maxc[1]+1)*timeinterval
-    clusters = ClusterEnsemble(Cluster({Rectangle(location_range=(minplace[i], maxplace[i]), time_range=(mintime[i], maxtime[i]), found_by=[name])}) for i in range(len(groups)))
+        minplacezzzzz[i] = minc[0]*placeinterval
+        maxplacezzzzz[i] = (maxc[0]+1)*placeinterval
+        mintimezzzzz[i] = mintime + minc[1] * timeinterval
+        maxtimezzzzz[i] = mintime + (maxc[1]+1)*timeinterval
+    clusters = ClusterEnsemble(Cluster({Rectangle(location_range=(minplacezzzzz[i], maxplacezzzzz[i]), time_range=(mintimezzzzz[i], maxtimezzzzz[i]), found_by=[name])}) for i in range(len(groups)))
     return clusters
 
 
 def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01, name="DBSCAN"):
-    """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters: 
+    """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.Circuit`
 
     :param binLengthX: Location bin width (m)
     :type binLengthX: float
-    
+
     :param binLengthY: time bin width (weeks)
     :type binLengthY: float
 
-    :param epsilon: radius of the neighborhoods that DBSCAN uses 
+    :param epsilon: radius of the neighborhoods that DBSCAN uses
     :type epsilon: float
 
     :param minPts: minimum amount of points in an epsilon-neighborhood to be recognized as a core point by DBSCAN
     :type minPts: float
-    
+
     :param shave: percentage of points that are removed from the edges of the clusters, to make them fit better
     :type shave: float
 
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
     """
-  
+
     # loading data
     pds = circuit.pd[["Location in meters (m)", "Date/time (UTC)"]][circuit.pd_occured]
     times = pds["Date/time (UTC)"]
     times2 = circuit.pd["Date/time (UTC)"]
     locations = pds["Location in meters (m)"]
-    
-    
+
+
     # the following block of code is from https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
     # making a histogram of the data
     vals = np.array(pds)
@@ -485,30 +477,30 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     c = ((vals[0,cuts] - ranges[0,0]) / (ranges[0,1] - ranges[0,0]) * bins[0]).astype(np.int_)
     c += bins[0]*((vals[1,cuts] - ranges[1,0]) / (ranges[1,1] - ranges[1,0]) * bins[1]).astype(np.int_)
     weights = np.bincount(c, minlength=bins[0]*bins[1]).reshape(*bins)
-   
-   
-    # reshaping and scaling the data to fit DBSCAN 
+
+
+    # reshaping and scaling the data to fit DBSCAN
     weights = weights.reshape(bins[0]*bins[1],1)
     data = np.mgrid[0:bins[1], 0:bins[0]].reshape(2,-1).T.astype(np.float64)
     data[:,[0, 1]] = data[:,[1, 0]]
     weightedData = np.concatenate((data,weights), axis = 1)
-    
+
     # removing empty bins
     weightedDataNoZero = np.array([row for row in weightedData if row[2] > 0])
     sample_weight = weightedDataNoZero[:, 2]
-    
+
     # DBSCAN
     labels = DBSCAN(eps=epsilon, min_samples=minPts).fit(weightedDataNoZero[:, [0,1]], sample_weight = weightedDataNoZero[:, 2] ).labels_
-    
+
     # rescaling the data
     clusterAmount = len(set(labels))-1
     weightedDataNoZero[:, 2] = labels
     weightedDataNoZero[:,0] *= endlocation/bins[0]
     weightedDataNoZero[:,0] += endlocation/bins[0]/2
     weightedDataNoZero[:,1] += (starttime + (endtime-starttime)/bins[1]/2)
-    
-     # make "rough" clusters 
-    
+
+     # make "rough" clusters
+
     locLower = [min([row[0] for row in weightedDataNoZero if row[2] == i]) - endlocation/bins[0]/2 for i in range(clusterAmount)]
     locUpper = [max([row[0] for row in weightedDataNoZero if row[2] == i]) + endlocation/bins[0]/2 for i in range(clusterAmount)]
     timeLower = [np.datetime64(int((min([row[1] for row in weightedDataNoZero if row[2] == i]) - ((endtime-starttime)/bins[1]/2))*60*60*24*7*binLengthY), 's') for i in range(clusterAmount)]
@@ -590,16 +582,16 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
     Each random PD gets its own Rectangle of size loc_rect_size * time_rect_size.
     Takes the __or__ (|) over all Rectangles and looks at how many PDs are associated with the result.
     If there are enough (influenced by circuit length, total recorded circuit time and choices_div*found_div), the Cluster is accepted as valid
-    
+
     Increasing choices_div makes the algorithm stricter
     Increasing found_div makes the algorithm more lenient
-    
+
     :param circuit: The circuit to clusterize
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
     :param choices_div: Magic factor that determines how many random choices are made
     :type choices_div: int, optional
-    
+
     :param found_div: Magic factor that determines how many random PDs need to have found a cluster before it is seen as abnormal
     :type found_div: int, optional
 
@@ -617,7 +609,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
     """
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    
+
     time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
     num = int(circuit.circuitlength * time_factor)
     chosen_pds = np.random.randint(len(locations), size=num // choices_div)
@@ -625,7 +617,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
     chosen_times = times.iloc[chosen_pds].values
 
     xlength = loc_rect_size // 2
-    ylength = time_rect_size // 2    
+    ylength = time_rect_size // 2
     rectangles = set()
     for i, point in enumerate(zip(chosen_locations, chosen_times)):
         rectangles.add(Rectangle(
