@@ -177,7 +177,7 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
-    overlay_cluster_ensemble(algorithms.warnings_to_clusters(circuit, cluster_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
+    overlay_cluster_ensemble(algorithms.warnings_to_clusters(circuit, rectangle_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
 def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
