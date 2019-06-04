@@ -1,1 +1,1 @@
-from . import globals, circuit, cluster, plot, algorithms, ensemble
+from . import globals, circuit, rectangle, cluster, plot, algorithms, ensemble
