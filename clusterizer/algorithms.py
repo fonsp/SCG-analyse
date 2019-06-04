@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import scipy.stats
 import functools
@@ -50,18 +51,24 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # 7 is the length of X--X--X
     # right? ? ?
 
-    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+    # Undocumented: circuit can be a tuple containing `PD locations`, `PD charges`, `circuit length`
+    # Makes the 2D algorithm slightly faster by reusing these values
+    if type(circuit) is tuple:
+        locations, charges, circuitlength = circuit
+    else:
+        locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
+        charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+        circuitlength = circuit.circuitlength
     # %% Discretize PD locations
     # Could be sped up using more efficient methods, parallisation, and by taking advantage of the uniform bin size.
     # See: https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
 
-    bins = np.arange(start=0., stop=circuit.circuitlength+loc_bin_size, step=loc_bin_size)
+    bins = np.arange(start=0., stop=circuitlength+loc_bin_size, step=loc_bin_size)
     # NP.HISTOGRAM bin_contents, _ = np.histogram(locations, bins=bins, weights=charges if weigh_charges else None)
     bin_contents = faster_histogram_1d(locations,
                                        bins_start=0.0,
                                        bin_width=loc_bin_size,
-                                       num_bins=int(circuit.circuitlength / loc_bin_size)+1,
+                                       num_bins=int(circuitlength / loc_bin_size)+1,
                                        weights=charges if weigh_charges else None,
                                        check_inside_bounds=False)
 
@@ -69,7 +76,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     nominal_pd_quantile_level = np.sort(bin_contents)[int(nominal_circuit_fraction * len(bin_contents))] + 1
 
     # %% Fit a Poisson distribution on nominal data
-    square = lambda x: x*x
+    square = np.square
 
     phieta = scipy.stats.norm.ppf(q=nominal_circuit_fraction)
     rate = .25*square(-phieta + np.sqrt(square(phieta) + 4*nominal_pd_quantile_level))
@@ -149,13 +156,13 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     """
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured] if weigh_charges else 0
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
     times = np.float64(times)
     time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Apply the 1D algorithm
     loc_rectangles, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(
-            circuit,
+            (locations, charges, circuit.circuitlength),
             certainty=certainty,
             loc_bin_size=loc_bin_size,
             nominal_circuit_fraction=nominal_circuit_fraction,
@@ -199,9 +206,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # NP.HISTOGRAM: time_bins = np.arange(min(times), max(times) + time_bin_size, time_bin_size)
     # NP.HISTOGRAM: nuster_counts, _ = np.histogram(times_in_nuster, bins=time_bins)
     nuster_counts = faster_histogram_1d(times_in_nuster,
-                                        bins_start=min(times),
+                                        bins_start=times[0],
                                         bin_width=time_bin_size,
-                                        num_bins=int((max(times) - min(times))/time_bin_size)+1,
+                                        num_bins=int((times[-1] - times[0])/time_bin_size)+1,
                                         weights=charges_in_nuster if weigh_charges else None,
                                         check_inside_bounds=False)
 
@@ -218,9 +225,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_rectangle.location_range)], bins=time_bins)
 
         clust_counts = faster_histogram_1d(times_in_loc_rectangle,
-                                           bins_start=min(times),
+                                           bins_start=times[0],
                                            bin_width=time_bin_size,
-                                           num_bins=int((max(times) - min(times))/time_bin_size) + 1,
+                                           num_bins=int((times[-1] - times[0])/time_bin_size) + 1,
                                            weights=charges_in_loc_rectangle if weigh_charges else None,
                                            check_inside_bounds=False)
 
@@ -237,11 +244,11 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         is_suspiciously_high_ratio = found_ratio > magic_factor * nominal_ratio
         for start_index, end_index in group_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
-            time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
+            time_range = (np.array([start_index, end_index]) * time_bin_size + times[0]).astype("datetime64[ns]")
             rectangle = Rectangle(location_range=loc_rectangle.location_range, time_range=tuple(time_range), found_by=[name])
             found_2d_rectangles.add(rectangle)
 
-        found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
+    found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
     if return_intermediate_values:
         nusters = ClusterEnsemble(Cluster({Rectangle(location_range=tuple(r))}) for r in nuster_ranges)
         return found_2d_clusters, loc_rectangles, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
