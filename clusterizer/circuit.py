@@ -18,7 +18,7 @@ from . import globals
 # https://github.com/pandas-dev/pandas/issues/15086
 # (has been solved as of april 2019)
 
-sys._enablelegacywindowsfsencoding()
+#sys._enablelegacywindowsfsencoding()
 
 
 def save(circuit):
