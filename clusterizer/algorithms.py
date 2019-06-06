@@ -407,12 +407,20 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     #determine the minimum amount of partial discharges needed for a bin to be part of a cluster
 
-    grid_flattened = grid.flatten()
-    grid_flattened = np.sort(grid_flattened)
+    grid_flattened = np.sort(grid, axis=None)
     gridlength = len(grid_flattened)
-    ratio = grid_flattened - invsensitivity * np.array(range(gridlength))
-
-    minval = grid_flattened[np.argmin(ratio)]
+    saved_ratios = np.zeros(gridlength)
+    min_ratio = grid_flattened[0]
+    min_index = 0
+    for i in range(gridlength-1, 0, -1):
+        ratio = grid_flattened[i] - invsensitivity * i
+        saved_ratios[i] = ratio
+        if ratio <= min_ratio:
+            min_ratio = ratio
+            min_index = i
+        elif all(ratio > saved_ratios[i+1:i+10]):
+            break
+    minval = grid_flattened[min_index]
 
     # group data
 
