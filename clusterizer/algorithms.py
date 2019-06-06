@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import scipy.stats
 import functools
@@ -50,18 +51,24 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # 7 is the length of X--X--X
     # right? ? ?
 
-    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+    # Undocumented: circuit can be a tuple containing `PD locations`, `PD charges`, `circuit length`
+    # Makes the 2D algorithm slightly faster by reusing these values
+    if type(circuit) is tuple:
+        locations, charges, circuitlength = circuit
+    else:
+        locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
+        charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+        circuitlength = circuit.circuitlength
     # %% Discretize PD locations
     # Could be sped up using more efficient methods, parallisation, and by taking advantage of the uniform bin size.
     # See: https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
 
-    bins = np.arange(start=0., stop=circuit.circuitlength+loc_bin_size, step=loc_bin_size)
+    bins = np.arange(start=0., stop=circuitlength+loc_bin_size, step=loc_bin_size)
     # NP.HISTOGRAM bin_contents, _ = np.histogram(locations, bins=bins, weights=charges if weigh_charges else None)
     bin_contents = faster_histogram_1d(locations,
                                        bins_start=0.0,
                                        bin_width=loc_bin_size,
-                                       num_bins=int(circuit.circuitlength / loc_bin_size)+1,
+                                       num_bins=int(circuitlength / loc_bin_size)+1,
                                        weights=charges if weigh_charges else None,
                                        check_inside_bounds=False)
 
@@ -69,7 +76,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     nominal_pd_quantile_level = np.sort(bin_contents)[int(nominal_circuit_fraction * len(bin_contents))] + 1
 
     # %% Fit a Poisson distribution on nominal data
-    square = lambda x: x*x
+    square = np.square
 
     phieta = scipy.stats.norm.ppf(q=nominal_circuit_fraction)
     rate = .25*square(-phieta + np.sqrt(square(phieta) + 4*nominal_pd_quantile_level))
@@ -149,13 +156,13 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     """
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured] if weigh_charges else 0
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
     times = np.float64(times)
     time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Apply the 1D algorithm
     loc_rectangles, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(
-            circuit,
+            (locations, charges, circuit.circuitlength),
             certainty=certainty,
             loc_bin_size=loc_bin_size,
             nominal_circuit_fraction=nominal_circuit_fraction,
@@ -199,11 +206,12 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # NP.HISTOGRAM: time_bins = np.arange(min(times), max(times) + time_bin_size, time_bin_size)
     # NP.HISTOGRAM: nuster_counts, _ = np.histogram(times_in_nuster, bins=time_bins)
     nuster_counts = faster_histogram_1d(times_in_nuster,
-                                        bins_start=min(times),
+                                        bins_start=times[0],
                                         bin_width=time_bin_size,
-                                        num_bins=int((max(times) - min(times))/time_bin_size)+1,
+                                        num_bins=int((times[-1] - times[0])/time_bin_size)+1,
                                         weights=charges_in_nuster if weigh_charges else None,
                                         check_inside_bounds=False)
+
 
     # %% Discretize in second dimension
     found_2d_rectangles = set()
@@ -215,10 +223,11 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         if weigh_charges:
             charges_in_loc_rectangle = charges[in_current_loc_rectangle]
         # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_rectangle.location_range)], bins=time_bins)
+
         clust_counts = faster_histogram_1d(times_in_loc_rectangle,
-                                           bins_start=min(times),
+                                           bins_start=times[0],
                                            bin_width=time_bin_size,
-                                           num_bins=int((max(times) - min(times))/time_bin_size) + 1,
+                                           num_bins=int((times[-1] - times[0])/time_bin_size) + 1,
                                            weights=charges_in_loc_rectangle if weigh_charges else None,
                                            check_inside_bounds=False)
 
@@ -233,14 +242,13 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         found_ratio[np.isnan(found_ratio)] = 0.0
 
         is_suspiciously_high_ratio = found_ratio > magic_factor * nominal_ratio
-
         for start_index, end_index in group_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
-            time_range = (np.array([start_index, end_index]) * time_bin_size + min(times)).astype("datetime64[ns]")
+            time_range = (np.array([start_index, end_index]) * time_bin_size + times[0]).astype("datetime64[ns]")
             rectangle = Rectangle(location_range=loc_rectangle.location_range, time_range=tuple(time_range), found_by=[name])
             found_2d_rectangles.add(rectangle)
 
-        found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
+    found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
     if return_intermediate_values:
         nusters = ClusterEnsemble(Cluster({Rectangle(location_range=tuple(r))}) for r in nuster_ranges)
         return found_2d_clusters, loc_rectangles, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
@@ -346,29 +354,13 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
     """
-    def get_box_x(index, boxnumber, maxplace, locations):
-        return min(boxnumber-1, int(locations.iloc[index]*boxnumber/maxplace))
-
-    def get_box_y(index, boxnumber, maxtime, times):
-        return min(boxnumber-1, int(times.iloc[index]*boxnumber/maxtime))
-
-    def make_pdgrid(locations, times, placeinterval, timeinterval):
-        maxplace = max(locations)
-        maxtime = max(times)
-        boxesx = int(maxplace/placeinterval)
-        boxesy = int(maxtime/timeinterval)
-        grid = np.zeros((boxesx, boxesy))
-        datalength = len(locations)
-        for i in range(datalength):
-            grid[get_box_x(i, boxesx, maxplace, locations), get_box_y(i, boxesy, maxtime, times)] += 1
-        return grid
-
     def track_groups(elt, todo, ijlist):
         if elt in ijlist:
             todo += [elt]
             ijlist.remove(elt)
 
-    def flood_fill(grid, condition, sizex, sizey):
+    def flood_fill(grid, condition):
+        sizex, sizey = grid.shape
         ijlist = []
         for i in range(sizex):
             for j in range(sizey):
@@ -387,10 +379,9 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
                     track_groups([p[0]-1, p[1]], todo, ijlist)
                     track_groups([p[0], p[1]+1], todo, ijlist)
                     track_groups([p[0], p[1]-1], todo, ijlist)
-                    if groupstart:
-                        groupstart = False
-                    else:
+                    if not groupstart:
                         groups[groupcount] += [p]
+                    groupstart = False
                     todo.remove(p)
             groupcount += 1
         return np.array(groups)
@@ -399,14 +390,20 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    mintimes = min(times)
-    times -= mintimes
-    maxplace = max(locations)
-    maxtime = max(times)
+    mintime = times.values[0]
+    maxplace = circuit.circuitlength
+    maxtime = times.values[-1]
 
     # create bins:
 
-    grid = make_pdgrid(locations, times, placeinterval, timeinterval)
+    times_float = times.values.astype(float)
+
+    mintime_float = float(mintime)
+    maxtime_float = float(maxtime)
+
+    loc_bins = np.arange(0, maxplace, placeinterval)
+    time_bins = np.arange(mintime_float, maxtime_float, float(np.timedelta64(timeinterval, "ns")))
+    grid, _, _ = np.histogram2d(locations, times_float, bins=[loc_bins, time_bins])
 
     #determine the minimum amount of partial discharges needed for a bin to be part of a cluster
 
@@ -419,27 +416,29 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     # group data
 
-    groups = flood_fill(grid, minval, int(maxplace/placeinterval), int(maxtime/timeinterval))
-    minplace = np.zeros(len(groups))
-    maxplace = np.zeros(len(groups))
-    mintime = np.empty(len(groups), dtype='datetime64[s]')
-    maxtime = np.empty(len(groups), dtype='datetime64[s]')
+    groups = flood_fill(grid, minval)
+    minplacezzzzz = np.zeros(len(groups))
+    maxplacezzzzz = np.zeros(len(groups))
+    mintimezzzzz = np.empty(len(groups), dtype='datetime64[s]')
+    maxtimezzzzz = np.empty(len(groups), dtype='datetime64[s]')
     for i in range(len(groups)):
+        # groups[0] = [[1,20],[3,3],[5,5]]
+        # minc =
         minc = np.amin(groups[i], axis=0)
         maxc = np.amax(groups[i], axis=0)
-        minplace[i] = minc[0]*placeinterval
-        maxplace[i] = (maxc[0]+1)*placeinterval
-        mintime[i] = mintimes+minc[1]*timeinterval
-        maxtime[i] = mintimes+(maxc[1]+1)*timeinterval
-    clusters = ClusterEnsemble(Cluster({Rectangle(location_range=(minplace[i], maxplace[i]), time_range=(mintime[i], maxtime[i]), found_by=[name])}) for i in range(len(groups)))
+        minplacezzzzz[i] = minc[0]*placeinterval
+        maxplacezzzzz[i] = (maxc[0]+1)*placeinterval
+        mintimezzzzz[i] = mintime + minc[1] * timeinterval
+        maxtimezzzzz[i] = mintime + (maxc[1]+1)*timeinterval
+    clusters = ClusterEnsemble(Cluster({Rectangle(location_range=(minplacezzzzz[i], maxplacezzzzz[i]), time_range=(mintimezzzzz[i], maxtimezzzzz[i]), found_by=[name])}) for i in range(len(groups)))
     return clusters
 
 
-def clusterize_DBSCAN(circuit, binLengthX=2, binLengthY=1, epsilon=3, minPts=125, shave=0.01, name="DBSCAN"):
+def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minPts = 125, shave = 0.01, name="DBSCAN"):
     """Identify two-dimensional clusters based on DBSCAN, a density based clustering alogrithm from python library scikit-learn. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
-    :type circuit: class:`clusterizer.circuit.MergedCircuit`
+    :type circuit: class:`clusterizer.circuit.Circuit`
 
     :param binLengthX: Location bin width (m)
     :type binLengthX: float
@@ -466,6 +465,7 @@ def clusterize_DBSCAN(circuit, binLengthX=2, binLengthY=1, epsilon=3, minPts=125
     times2 = circuit.pd["Date/time (UTC)"]
     locations = pds["Location in meters (m)"]
 
+
     # the following block of code is from https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
     # making a histogram of the data
     vals = np.array(pds)
@@ -476,35 +476,38 @@ def clusterize_DBSCAN(circuit, binLengthX=2, binLengthY=1, epsilon=3, minPts=125
     endtime = times2[len(circuit.pd)-1].value/1000000000/60/60/24/7/binLengthY
     endlocation = circuit.circuitlength
     bins = (int(endlocation/binLengthX), int(endtime-starttime))
-    ranges = ((0, endlocation), (starttime, endtime))
+    ranges = ((0,endlocation),(starttime,endtime))
     bins = np.asarray(bins).astype(np.int64)
     ranges = np.asarray(ranges).astype(np.float64)
-    edges = (np.linspace(*ranges[0, :], bins[0]+1), np.linspace(*ranges[1, :], bins[1]+1))
-    cuts = (vals[0] >= ranges[0, 0]) & (vals[0] < ranges[0, 1]) & (vals[1] >= ranges[1, 0]) & (vals[1] < ranges[1, 1])
-    c = ((vals[0, cuts] - ranges[0, 0]) / (ranges[0, 1] - ranges[0, 0]) * bins[0]).astype(np.int_)
-    c += bins[0]*((vals[1, cuts] - ranges[1, 0]) / (ranges[1, 1] - ranges[1, 0]) * bins[1]).astype(np.int_)
+    edges = (np.linspace(*ranges[0,:], bins[0]+1), np.linspace(*ranges[1,:], bins[1]+1))
+    cuts = (vals[0]>=ranges[0,0]) & (vals[0]<ranges[0,1]) & (vals[1]>=ranges[1,0]) & (vals[1]<ranges[1,1])
+    c = ((vals[0,cuts] - ranges[0,0]) / (ranges[0,1] - ranges[0,0]) * bins[0]).astype(np.int_)
+    c += bins[0]*((vals[1,cuts] - ranges[1,0]) / (ranges[1,1] - ranges[1,0]) * bins[1]).astype(np.int_)
     weights = np.bincount(c, minlength=bins[0]*bins[1]).reshape(*bins)
 
+
     # reshaping and scaling the data to fit DBSCAN
-    weights = weights.reshape(bins[0]*bins[1], 1)
-    data = np.mgrid[0:bins[1], 0:bins[0]].reshape(2, -1).T.astype(np.float64)
-    data[:, [0, 1]] = data[:, [1, 0]]
-    weightedData = np.concatenate((data, weights), axis=1)
+    weights = weights.reshape(bins[0]*bins[1],1)
+    data = np.mgrid[0:bins[1], 0:bins[0]].reshape(2,-1).T.astype(np.float64)
+    data[:,[0, 1]] = data[:,[1, 0]]
+    weightedData = np.concatenate((data,weights), axis = 1)
 
     # removing empty bins
     weightedDataNoZero = np.array([row for row in weightedData if row[2] > 0])
+    sample_weight = weightedDataNoZero[:, 2]
 
     # DBSCAN
-    labels = DBSCAN(eps=epsilon, min_samples=minPts).fit(weightedDataNoZero[:, [0, 1]], sample_weight=weightedDataNoZero[:, 2]).labels_
+    labels = DBSCAN(eps=epsilon, min_samples=minPts).fit(weightedDataNoZero[:, [0,1]], sample_weight = weightedDataNoZero[:, 2] ).labels_
 
     # rescaling the data
-    weightedDataNoZero[:, 2] = labels
-    weightedDataNoZero[:, 0] *= endlocation/bins[0]
-    weightedDataNoZero[:, 0] += endlocation/bins[0]/2
-    weightedDataNoZero[:, 1] += (starttime + (endtime-starttime)/bins[1]/2)
-
-    # make "rough" clusters
     clusterAmount = len(set(labels))-1
+    weightedDataNoZero[:, 2] = labels
+    weightedDataNoZero[:,0] *= endlocation/bins[0]
+    weightedDataNoZero[:,0] += endlocation/bins[0]/2
+    weightedDataNoZero[:,1] += (starttime + (endtime-starttime)/bins[1]/2)
+
+     # make "rough" clusters
+
     locLower = [min([row[0] for row in weightedDataNoZero if row[2] == i]) - endlocation/bins[0]/2 for i in range(clusterAmount)]
     locUpper = [max([row[0] for row in weightedDataNoZero if row[2] == i]) + endlocation/bins[0]/2 for i in range(clusterAmount)]
     timeLower = [np.datetime64(int((min([row[1] for row in weightedDataNoZero if row[2] == i]) - ((endtime-starttime)/bins[1]/2))*60*60*24*7*binLengthY), 's') for i in range(clusterAmount)]
@@ -590,7 +593,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     Each random PD gets its own Rectangle of size loc_rect_size * time_rect_size.
     Takes the __or__ (|) over all Rectangles and looks at how many PDs are associated with the result.
     If there are enough (influenced by circuit length, total recorded circuit time and choices_div*found_div), the Cluster is accepted as valid
-    
+
     Increasing choices_div makes the algorithm stricter
     Increasing found_div makes the algorithm more lenient
 
@@ -603,7 +606,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
 
     :param choices_div: Magic factor that determines how many random choices are made
     :type choices_div: int, optional
-    
+
     :param found_div: Magic factor that determines how many random PDs need to have found a cluster before it is seen as abnormal
     :type found_div: int, optional
 
@@ -634,11 +637,12 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
         chosen_pds = np.random.randint(len(locations), size=num // choices_div)
     else:
         chosen_pds = np.random.randint(len(locations), size=choices_exact)
+
     chosen_locations = locations.iloc[chosen_pds].values
     chosen_times = times.iloc[chosen_pds].values
 
     xlength = loc_rect_size // 2
-    ylength = time_rect_size // 2    
+    ylength = time_rect_size // 2
     rectangles = set()
     for i, point in enumerate(zip(chosen_locations, chosen_times)):
         rectangles.add(Rectangle(

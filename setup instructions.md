@@ -51,9 +51,24 @@ venv\Scripts\activate.bat
 python -m pip install -r requirements.txt
 ```
 
-
-
 We can exit the virtual environment using the `deactivate` command (Unix & Windows).
+
+----
+
+To _enter_ the virtual environment (once it has been created):
+
+*Unix:*
+
+```bash
+source venv/bin/activate
+```
+
+*Windows:* (this can also be done using the Visual Studio GUI)
+
+```dos
+venv\Scripts\activate.bat
+```
+
 
 ## Jupyter Notebook
 
