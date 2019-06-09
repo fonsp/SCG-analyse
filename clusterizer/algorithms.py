@@ -410,12 +410,20 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     #determine the minimum amount of partial discharges needed for a bin to be part of a cluster
 
-    grid_flattened = grid.flatten()
-    grid_flattened = np.sort(grid_flattened)
+    grid_flattened = np.sort(grid, axis=None)
     gridlength = len(grid_flattened)
-    ratio = grid_flattened - invsensitivity * np.array(range(gridlength))
-
-    minval = grid_flattened[np.argmin(ratio)]
+    saved_ratios = np.zeros(gridlength)
+    min_ratio = grid_flattened[0]
+    min_index = 0
+    for i in range(gridlength-1, 0, -1):
+        ratio = grid_flattened[i] - invsensitivity * i
+        saved_ratios[i] = ratio
+        if ratio <= min_ratio:
+            min_ratio = ratio
+            min_index = i
+        elif all(ratio > saved_ratios[i+1:i+10]):
+            break
+    minval = grid_flattened[min_index]
 
     # group data
 
@@ -533,15 +541,14 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     return(ClusterEnsemble(Cluster({r}) for r in rectangles2))
 
 
-def clusterize_ensemble_additive(circuit, algorithms=None, add=True):
+def clusterize_ensemble(circuit, algorithms=None, combine="and"):
     """
     Identify two dimensional clusters using multiple algorithms. The results are combined using the ClusterEnsemble class methods.
     algorithms should be an iterable containing algorithms. The algorithms should take as input a clusterizer.circuit.Circuit object and give as output a clusterizer.cluster.ClusterEnsemble object.
-    If add is set to true, the clusters will be added together. This means that the overlap is found between the clusters and the clusters are combined in a venn diagram like way. If add is set to false, the clusters will be orred together. The result of an or is the bounding box of two clusters (if they have overlap, clusters without overlap will remain separate).
+    Use combine to set the way in which Ensembles are combined. Set to "and" to &, "or" to |, "add" or "plus" to +.
 
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.Circuit`
-
 
     :param algorithms: List of algorithms (methods from this submodule) to be used. Defaults to [clusterize_poisson, clusterize_DBSCAN, clusterize_pinta].
     :type algorithms: iterable, optional
@@ -554,10 +561,15 @@ def clusterize_ensemble_additive(circuit, algorithms=None, add=True):
         algorithms = [clusterize_poisson, clusterize_DBSCAN, clusterize_pinta]
     for alg in algorithms:
         clusters = alg(circuit)
-        if add:
-            result += clusters
-        else:
+        if "and" in combine:
+            if not result:
+                result = clusters
+            else:
+                result &= clusters
+        elif "or" in combine:
             result |= clusters
+        else:
+            result += clusters
     return result
 
 
@@ -586,7 +598,7 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, rectangle_width=N
             warning_rectangles.add(Rectangle.from_circuit_warning(circuit, i, rectangle_width=rectangle_width))
     return ClusterEnsemble(Cluster({r}) for r in warning_rectangles)
 
-def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size=32, time_rect_size=np.timedelta64(6, 'D'), name="Monte Carlo"):
+def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact=None, found_exact=None, loc_rect_size=32, time_rect_size=np.timedelta64(6, 'D'), name="Monte Carlo"):
     """
     Randomized Monte Carlo algorithm.
     Uses random PD choices to determine Clusters. Number of PDs is influenced by circuit length, total recorded circuit time and choices_div.
@@ -597,6 +609,10 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
     Increasing choices_div makes the algorithm stricter
     Increasing found_div makes the algorithm more lenient
 
+    choices_exact and found_exact can be set instead of choices_div and found_div
+    In this case, the exact values are used for the number of random choices and the number of points that need to have found a cluster for it to be accepted
+    If they are set to None, the dynamic calculation with choices_div and found_div is used instead
+    
     :param circuit: The circuit to clusterize
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
@@ -605,6 +621,12 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
 
     :param found_div: Magic factor that determines how many random PDs need to have found a cluster before it is seen as abnormal
     :type found_div: int, optional
+
+    :choices_exact: None to use dynamic calculation, set to a number to use that exact number of random points
+    :type choics_exact: int or None, optional
+
+    :found_exact: None to use dynamic calculation, set to a number to use that exact number of points before a cluster is accepted
+    :type found_exact: int or None, optional
 
     :param loc_rect_size: The size of rectangles in the location dimension
     :type loc_rect_size: int, optional
@@ -620,10 +642,14 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
     """
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    
+    if choices_exact is None:
+        time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
+        num = int(circuit.circuitlength * time_factor)
+        chosen_pds = np.random.randint(len(locations), size=num // choices_div)
+    else:
+        chosen_pds = np.random.randint(len(locations), size=choices_exact)
 
-    time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
-    num = int(circuit.circuitlength * time_factor)
-    chosen_pds = np.random.randint(len(locations), size=num // choices_div)
     chosen_locations = locations.iloc[chosen_pds].values
     chosen_times = times.iloc[chosen_pds].values
 
@@ -636,11 +662,13 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
             time_range=(point[1]-ylength/2, point[1]+ylength/2),\
             found_by={str(i)}))
 
-    clusters = {ClusterEnsemble({Cluster({r})}) for r in rectangles}
+    clusters = {Cluster({r}) for r in rectangles}
     reduced = functools.reduce(operator.__or__, clusters)
-    highly_found = [x for x in reduced if len(x.found_by) > num // (choices_div*found_div)]
-    result = set()
-    for c in highly_found:
-        for r in c:
-            r.found_by = {name}
-    return highly_found
+    if found_exact is None:
+        highly_found = [x for x in reduced if len(x.found_by) > num // (choices_div*found_div)]
+    else:
+        highly_found = [x for x in reduced if len(x.found_by) > found_exact]
+    for r in highly_found:
+        r.found_by = {name}
+    return ClusterEnsemble.from_iterable(highly_found)
+
