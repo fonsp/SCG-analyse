@@ -99,7 +99,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     rectangles = set(Rectangle(location_range=tuple(loc_bin_size * np.array(c)), found_by=[name]) for c in group_edges)
 
     if return_intermediate_values:
-        return rectangles, bins, bin_contents, nominal_pd_quantile_level, rate
+        return rectangles, bins, bin_contents, nominal_pd_quantile_level, rate, fault_pd_level
     return rectangles
 
 
@@ -157,11 +157,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured] if weigh_charges else 0
-    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    times = np.float64(times)
-    time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
+
     # %% Apply the 1D algorithm
-    loc_rectangles, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(
+    loc_rectangles, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate, fault_pd_level = clusterize_poisson_1d(
             (locations, charges, circuit.circuitlength),
             certainty=certainty,
             loc_bin_size=loc_bin_size,
@@ -171,6 +169,11 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
             max_bins_skipped=max_loc_bins_skipped,
             return_intermediate_values=True)
 
+    if not loc_rectangles:
+        return ClusterEnsemble(set())
+    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    times = np.float64(times)
+    time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Find _nusters_
     is_below_quantile = loc_bin_contents < nominal_pd_quantile_level
 
@@ -309,20 +312,20 @@ def group_boolean_series(series, max_consecutive_false=5, min_length=5, min_coun
 
     group_start = 0   # Beginindex van het huidige group
     gap_size = 0        # Lengte van de rij nee'tjes die nu wordt belopen
-    true_count = 0      # Aantal ja'tjes dat is gevonden in dit group
+    true_count = 0      # Aantal ja'tjes dat is gevonden in deze group
 
     for i, x in enumerate(series):
         if x:  # We doorlopen ja'tjes
             true_count += 1
             if gap_size > max_consecutive_false:   # Einde group
                 group_end = i - gap_size
-                if group_end - group_start >= min_length and true_count >= min_count:
+                if group_end - group_start >= min_length and true_count > min_count:
                     # group was lang genoeg en heeft genoeg ja'tjes:
                     groups.add((group_start, group_end))
 
-                # Begin een nieuw group
+                # Begin een nieuwe group
                 group_start = i
-                true_count = 0
+                true_count = 1
 
             gap_size = 0  # We doorlopen geen nee'tjes (meer)
 
@@ -469,6 +472,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     # the following block of code is from https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
     # making a histogram of the data
     vals = np.array(pds)
+
     for val in vals:
         val[1] = val[1].value/1000000000/60/60/24/7/binLengthY
     vals = vals.T
