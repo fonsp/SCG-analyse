@@ -98,11 +98,12 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # It might be better to create a `clusterize_poisson_result` class containing all these intermediate values.
     # Similar to `OptimizeResult` in `scipy.optimize` (https://docs.scipy.org/doc/scipy/reference/optimize.html)
 
-    rectangles = set(Rectangle(location_range=tuple(loc_bin_size * np.array(c)), found_by=[name]) for c in group_edges)
+    found_1d_rectangles = set(Rectangle(location_range=tuple(loc_bin_size * np.array(c)), found_by=[name]) for c in group_edges)
+    found_1d_clusters = ClusterEnsemble(Cluster({r}) for r in found_1d_rectangles)
 
     if return_intermediate_values:
-        return rectangles, bins, bin_contents, nominal_pd_quantile_level, rate, fault_pd_level
-    return rectangles
+        return found_1d_clusters, bins, bin_contents, nominal_pd_quantile_level, rate, fault_pd_level
+    return found_1d_clusters
 
 
 def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.timedelta64(7, 'D'), nominal_circuit_fraction=.80, weigh_charges=False, min_loc_bin_count=2, max_loc_bins_skipped=2, magic_factor=4.0, min_time_bin_count=2, max_time_bins_skipped=1, return_intermediate_values=False, name="Poisson 2D"):
@@ -164,7 +165,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured] if weigh_charges else 0
 
     # %% Apply the 1D algorithm
-    loc_rectangles, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate, fault_pd_level = clusterize_poisson_1d(
+    loc_clusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate, fault_pd_level = clusterize_poisson_1d(
             (locations, charges, circuit.circuitlength),
             certainty=certainty,
             loc_bin_size=loc_bin_size,
@@ -174,7 +175,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
             max_bins_skipped=max_loc_bins_skipped,
             return_intermediate_values=True)
 
-    if not loc_rectangles:
+    if not loc_clusters:
         return ClusterEnsemble(set())
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
     times = np.float64(times)
@@ -192,7 +193,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # (Although we suspect that this situation is actually impossible)
     if total_nusters_length < circuit.circuitlength * 0.1:
         print("2D poisson model failed on Circuit {0}: there are not enough line segments with nominal PD behaviour. 1D clusters will be returned.".format(circuit.circuitnr))
-        return loc_rectangles
+        return loc_clusters
 
     # %% For each PD, determine whether it lies in one of the nusters
 
@@ -223,13 +224,13 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # %% Discretize in second dimension
     found_2d_rectangles = set()
 
-    for loc_rectangle in loc_rectangles:
+    for loc_cluster in loc_clusters:
         # Potential speed-up: during the 1D algorithm, PDs were binned, so a list was created of _bin indices_. This list could be reused, to avoid the use of `which_pds_inside_location_range`.
-        in_current_loc_rectangle = which_pds_inside_location_range(loc_rectangle.location_range)
+        in_current_loc_rectangle = which_pds_inside_location_range(loc_cluster.location_range)
         times_in_loc_rectangle = times[in_current_loc_rectangle]
         if weigh_charges:
             charges_in_loc_rectangle = charges[in_current_loc_rectangle]
-        # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_rectangle.location_range)], bins=time_bins)
+        # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_cluster.location_range)], bins=time_bins)
 
         clust_counts = faster_histogram_1d(times_in_loc_rectangle,
                                            bins_start=times[0],
@@ -239,7 +240,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
                                            check_inside_bounds=False)
 
         # We study the ratio of PDs
-        rectangle_length = loc_rectangle.get_width()
+        rectangle_length = loc_cluster.get_width()
         nominal_ratio = rectangle_length / total_nusters_length
 
         # Dividing non-zero by zero (which gives np.inf) is a desired result.
@@ -252,13 +253,13 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         for start_index, end_index in group_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
             time_range = (np.array([start_index, end_index]) * time_bin_size + times[0]).astype("datetime64[ns]")
-            rectangle = Rectangle(location_range=loc_rectangle.location_range, time_range=tuple(time_range), found_by=[name])
+            rectangle = Rectangle(location_range=loc_cluster.location_range, time_range=tuple(time_range), found_by=[name])
             found_2d_rectangles.add(rectangle)
 
     found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
     if return_intermediate_values:
         nusters = ClusterEnsemble(Cluster({Rectangle(location_range=tuple(r))}) for r in nuster_ranges)
-        return found_2d_clusters, loc_rectangles, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
+        return found_2d_clusters, loc_clusters, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
     return found_2d_clusters
 
 

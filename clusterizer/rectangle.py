@@ -59,7 +59,7 @@ class Rectangle:
         :rtype: numpy.timedelta64
         """
         if self.time_range is None:
-            return float("inf")
+            return np.inf
         return max(self.time_range) - max(self.time_range)
 
     # Wordt opgeroepen als je `str(een_rectangle)` of bv. `print(een_rectangle)` schrijft.

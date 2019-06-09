@@ -281,7 +281,7 @@ def overlay_rectangle(rectangle, ax=None, color=None, opacity=.3, scale_opacity_
         color = generate_color_from_string(clabel)
 
     if scale_opacity_by_found_by_count:
-        opacity = np.min([1.0, opacity * len(rectangle.found_by)])
+        opacity = np.min([1.0, opacity * np.max([1, len(rectangle.found_by)])])
 
     loc = list(rectangle.location_range)
     dates = rectangle.time_range
