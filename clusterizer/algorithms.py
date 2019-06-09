@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import scipy.stats
 import functools
@@ -35,6 +34,9 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
 
     :param return_intermediate_values: Also return additional values used by the algorithm?
     :type return_intermediate_values: bool, optional
+
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
 
     :return: When return_intermediate_values is False, returns the found clusters.
     When return_intermediate_values is True, returns
@@ -142,6 +144,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     :param return_intermediate_values: Also return additional values used by the algorithm?
     :type return_intermediate_values: bool, optional
 
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
+
     :return: When return_intermediate_values is False, returns the found 2D clusters.
     When return_intermediate_values is True, returns
     7-element tuple containing
@@ -214,7 +219,6 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
                                         num_bins=int((times[-1] - times[0])/time_bin_size)+1,
                                         weights=charges_in_nuster if weigh_charges else None,
                                         check_inside_bounds=False)
-
 
     # %% Discretize in second dimension
     found_2d_rectangles = set()
@@ -340,7 +344,8 @@ def group_boolean_series(series, max_consecutive_false=5, min_length=5, min_coun
 
 
 def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, 'D'), sensitivity=1.0, name="Pinta"):
-    """Algorithm that identifies clusters by using the fact that a lot of 2D-bins have the same amount of partial discharges. If the "gap" between two bins is too high, it means there is something going on with the bin. It uses the following parameters:
+    """
+    Algorithm that identifies clusters by using the fact that a lot of 2D-bins have the same amount of partial discharges. If the "gap" between two bins is too high, it means there is something going on with the bin. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
@@ -353,6 +358,9 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     :param sensitivity: The higher this value, the more clusters the algorithm will find.
     :type minPts: float, optional
+
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
 
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
@@ -465,6 +473,9 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
 
     :param shave: percentage of points that are removed from the edges of the clusters, to make them fit better
     :type shave: float
+
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
 
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
@@ -598,6 +609,7 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, rectangle_width=N
             warning_rectangles.add(Rectangle.from_circuit_warning(circuit, i, rectangle_width=rectangle_width))
     return ClusterEnsemble(Cluster({r}) for r in warning_rectangles)
 
+
 def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact=None, found_exact=None, loc_rect_size=32, time_rect_size=np.timedelta64(6, 'D'), name="Monte Carlo"):
     """
     Randomized Monte Carlo algorithm.
@@ -612,7 +624,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     choices_exact and found_exact can be set instead of choices_div and found_div
     In this case, the exact values are used for the number of random choices and the number of points that need to have found a cluster for it to be accepted
     If they are set to None, the dynamic calculation with choices_div and found_div is used instead
-    
+
     :param circuit: The circuit to clusterize
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
@@ -634,7 +646,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     :param time_rect_size: The size of rectangles in the time dimension
     :type time_rect_size: class:`numpy.timedelta64`, optional
 
-    :param name: The name of the algorithm
+    :param name: The name of the algorithm (for `Cluster.found_by`)
     :type name: string, optional
 
     :return: found clusters
@@ -642,7 +654,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     """
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    
+
     if choices_exact is None:
         time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
         num = int(circuit.circuitlength * time_factor)
@@ -671,4 +683,3 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     for r in highly_found:
         r.found_by = {name}
     return ClusterEnsemble.from_iterable(highly_found)
-

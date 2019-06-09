@@ -1,7 +1,7 @@
 import functools
 import numpy as np
-from . import rectangle
 import operator
+
 
 class Cluster:
     """

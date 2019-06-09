@@ -2,7 +2,8 @@ import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from . import algorithms
+import clusterizer.algorithms
+import clusterizer.globals
 import functools
 
 
@@ -177,7 +178,7 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
-    overlay_cluster_ensemble(algorithms.warnings_to_clusters(circuit, rectangle_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
+    overlay_cluster_ensemble(clusterizer.algorithms.warnings_to_clusters(circuit, rectangle_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
 def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
@@ -212,7 +213,7 @@ def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, 
 def overlay_cluster(cluster, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
     """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`
-    
+
     :param cluster: Cluster object with time or location bounds defined.
     :type cluster: class:`clusterizer.cluster.Cluster`
 
@@ -421,12 +422,12 @@ def save_figure_for_latex(filename, reset_size=True):
         fig.set_size_inches((8, 5))
     if not filename.endswith(".pdf"):
         filename = filename + ".pdf"
+    if "/" not in filename:
+        filename = (clusterizer.globals.git_path / "notebooks" / "plots" / filename).as_posix()
 
     fig.savefig(filename)
 
-    if "/" not in filename:
-        filename = "/notebooks/" + filename
-    print("Saved to "+filename)
+    print("Saved to " + filename)
 
 
 def save_figure_for_google_slides(filename, reset_size=True, dpi=600):
@@ -437,9 +438,9 @@ def save_figure_for_google_slides(filename, reset_size=True, dpi=600):
         fig.set_size_inches((8, 5))
     if not filename.endswith(".png"):
         filename = filename + ".png"
+    if "/" not in filename:
+        filename = (clusterizer.globals.git_path / "notebooks" / "plots" / filename).as_posix()
 
     fig.savefig(filename, dpi=dpi)
 
-    if "/" not in filename:
-        filename = "/notebooks/" + filename
-    print("Saved to "+filename)
+    print("Saved to " + filename)
