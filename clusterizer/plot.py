@@ -14,7 +14,7 @@ def axis_is_in_datetime_format(axis):
     return type(axis.get_major_formatter()) == pd.plotting._converter.PandasAutoDateFormatter
 
 
-def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, dot_colors="black", add_to_legend=False, set_title=True):
+def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, dot_colors="black", add_to_legend=False, set_title=True, rasterized=True):
     """Draw a location (x) vs time (y) scatter plot.
 
     :param circuit: Circuit object containing PD series to plot
@@ -43,9 +43,9 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, d
     times = circuit.pd['Date/time (UTC)'][circuit.pd_occured].values
     charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured].values
     if dot_size_to_charge_ratio is None:
-        ax.scatter(x=locations, y=times, s=3, c=dot_colors, marker='8', edgecolors="none")
+        ax.scatter(x=locations, y=times, s=3, c=dot_colors, marker='8', edgecolors="none", rasterized=rasterized)
     else:
-        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label=label, marker='8', edgecolors="none")
+        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label=label, marker='8', edgecolors="none", rasterized=rasterized)
 
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Date")
@@ -414,7 +414,7 @@ def legend_without_duplicate_labels(ax=None):
     ax.legend(*zip(*unique))
 
 
-def save_figure_for_latex(filename, reset_size=True):
+def save_figure_for_latex(filename, reset_size=True, dpi=600):
     """Slaat het laatste gebruikte `figure` (waar alle `Axes` in zitten) op als .pdf. De grootte van de figure wordt veranderd naar een standaardgrootte."""
     fig = plt.gcf()
 
@@ -425,7 +425,7 @@ def save_figure_for_latex(filename, reset_size=True):
     if "/" not in filename:
         filename = (clusterizer.globals.git_path / "notebooks" / "plots" / filename).as_posix()
 
-    fig.savefig(filename)
+    fig.savefig(filename, dpi=dpi)
 
     print("Saved to " + filename)
 
