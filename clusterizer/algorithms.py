@@ -410,7 +410,7 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     grid_flattened = np.sort(grid, axis=None)
     gridlength = len(grid_flattened)
-    saved_ratios = deque([0] * 10, maxlen=10)
+    saved_ratios = deque([np.inf] * 10, maxlen=10)
     min_ratio = 0
     min_index = 0
     for i in range(gridlength-1, 0, -1):
