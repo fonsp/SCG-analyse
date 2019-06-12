@@ -1,3 +1,5 @@
+from collections import deque
+import math
 import numpy as np
 import scipy.stats
 import functools
@@ -421,17 +423,17 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     grid_flattened = np.sort(grid, axis=None)
     gridlength = len(grid_flattened)
-    saved_ratios = np.zeros(gridlength)
-    min_ratio = grid_flattened[0]
+    saved_ratios = deque([np.inf] * 10, maxlen=10)
+    min_ratio = 0
     min_index = 0
     for i in range(gridlength-1, 0, -1):
         ratio = grid_flattened[i] - invsensitivity * i
-        saved_ratios[i] = ratio
         if ratio <= min_ratio:
             min_ratio = ratio
             min_index = i
-        elif all(ratio > saved_ratios[i+1:i+10]):
+        elif all(ratio > saved for saved in saved_ratios):
             break
+        saved_ratios.append(ratio)
     minval = grid_flattened[min_index]
 
     # group data
