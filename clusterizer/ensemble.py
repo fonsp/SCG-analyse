@@ -1,5 +1,6 @@
 from clusterizer.cluster import Cluster
 
+
 class ClusterEnsemble:
     """
     A Rectangle Ensemble should be a set of Cluster objects

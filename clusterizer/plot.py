@@ -2,7 +2,8 @@ import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from . import algorithms
+import clusterizer.algorithms
+import clusterizer.globals
 import functools
 
 
@@ -13,7 +14,7 @@ def axis_is_in_datetime_format(axis):
     return type(axis.get_major_formatter()) == pd.plotting._converter.PandasAutoDateFormatter
 
 
-def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, dot_colors="black", add_to_legend=False, set_title=True):
+def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, dot_colors="black", add_to_legend=False, set_title=True, rasterized=True):
     """Draw a location (x) vs time (y) scatter plot.
 
     :param circuit: Circuit object containing PD series to plot
@@ -42,9 +43,9 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, d
     times = circuit.pd['Date/time (UTC)'][circuit.pd_occured].values
     charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured].values
     if dot_size_to_charge_ratio is None:
-        ax.scatter(x=locations, y=times, s=3, c=dot_colors, marker='8', edgecolors="none")
+        ax.scatter(x=locations, y=times, s=3, c=dot_colors, marker='8', edgecolors="none", rasterized=rasterized)
     else:
-        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label=label, marker='8', edgecolors="none")
+        ax.scatter(x=locations, y=times, s=charges/dot_size_to_charge_ratio, c=dot_colors, label=label, marker='8', edgecolors="none", rasterized=rasterized)
 
     ax.set_xlabel("Location (m)")
     ax.set_ylabel("Date")
@@ -177,7 +178,7 @@ def overlay_warnings(circuit, ax=None, opacity=.3, line_width=None, add_to_legen
     :param add_to_legend: Label warning colors?
     :type add_to_legend: bool, optional
     """
-    overlay_cluster_ensemble(algorithms.warnings_to_clusters(circuit, rectangle_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
+    overlay_cluster_ensemble(clusterizer.algorithms.warnings_to_clusters(circuit, rectangle_width=line_width), ax=ax, opacity=opacity, add_to_legend=add_to_legend)
 
 
 def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
@@ -212,7 +213,7 @@ def overlay_cluster_ensemble(cluster_ensemble, ax=None, color=None, opacity=.3, 
 def overlay_cluster(cluster, ax=None, color=None, opacity=.3, scale_opacity_by_found_by_count=True, add_to_legend=True, label=None):
     """Draw shaded rectangles matching the cluster dimensions. Useful when the same axis was used to draw a location time scatter plot.
     Tip: use `clusterizer.plot.legend_without_duplicate_labels(ax)` instead of `ax.legend()`
-    
+
     :param cluster: Cluster object with time or location bounds defined.
     :type cluster: class:`clusterizer.cluster.Cluster`
 
@@ -280,7 +281,7 @@ def overlay_rectangle(rectangle, ax=None, color=None, opacity=.3, scale_opacity_
         color = generate_color_from_string(clabel)
 
     if scale_opacity_by_found_by_count:
-        opacity = np.min([1.0, opacity * len(rectangle.found_by)])
+        opacity = np.min([1.0, opacity * np.max([1, len(rectangle.found_by)])])
 
     loc = list(rectangle.location_range)
     dates = rectangle.time_range
@@ -413,7 +414,7 @@ def legend_without_duplicate_labels(ax=None):
     ax.legend(*zip(*unique))
 
 
-def save_figure_for_latex(filename, reset_size=True):
+def save_figure_for_latex(filename, reset_size=True, dpi=600):
     """Slaat het laatste gebruikte `figure` (waar alle `Axes` in zitten) op als .pdf. De grootte van de figure wordt veranderd naar een standaardgrootte."""
     fig = plt.gcf()
 
@@ -421,12 +422,12 @@ def save_figure_for_latex(filename, reset_size=True):
         fig.set_size_inches((8, 5))
     if not filename.endswith(".pdf"):
         filename = filename + ".pdf"
-
-    fig.savefig(filename)
-
     if "/" not in filename:
-        filename = "/notebooks/" + filename
-    print("Saved to "+filename)
+        filename = (clusterizer.globals.git_path / "notebooks" / "plots" / filename).as_posix()
+
+    fig.savefig(filename, dpi=dpi)
+
+    print("Saved to " + filename)
 
 
 def save_figure_for_google_slides(filename, reset_size=True, dpi=600):
@@ -437,9 +438,9 @@ def save_figure_for_google_slides(filename, reset_size=True, dpi=600):
         fig.set_size_inches((8, 5))
     if not filename.endswith(".png"):
         filename = filename + ".png"
+    if "/" not in filename:
+        filename = (clusterizer.globals.git_path / "notebooks" / "plots" / filename).as_posix()
 
     fig.savefig(filename, dpi=dpi)
 
-    if "/" not in filename:
-        filename = "/notebooks/" + filename
-    print("Saved to "+filename)
+    print("Saved to " + filename)

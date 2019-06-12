@@ -37,6 +37,9 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     :param return_intermediate_values: Also return additional values used by the algorithm?
     :type return_intermediate_values: bool, optional
 
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
+
     :return: When return_intermediate_values is False, returns the found clusters.
     When return_intermediate_values is True, returns
     5-element tuple containing
@@ -97,11 +100,12 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # It might be better to create a `clusterize_poisson_result` class containing all these intermediate values.
     # Similar to `OptimizeResult` in `scipy.optimize` (https://docs.scipy.org/doc/scipy/reference/optimize.html)
 
-    rectangles = set(Rectangle(location_range=tuple(loc_bin_size * np.array(c)), found_by=[name]) for c in group_edges)
+    found_1d_rectangles = set(Rectangle(location_range=tuple(loc_bin_size * np.array(c)), found_by=[name]) for c in group_edges)
+    found_1d_clusters = ClusterEnsemble(Cluster({r}) for r in found_1d_rectangles)
 
     if return_intermediate_values:
-        return rectangles, bins, bin_contents, nominal_pd_quantile_level, rate
-    return rectangles
+        return found_1d_clusters, bins, bin_contents, nominal_pd_quantile_level, rate, fault_pd_level
+    return found_1d_clusters
 
 
 def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.timedelta64(7, 'D'), nominal_circuit_fraction=.80, weigh_charges=False, min_loc_bin_count=2, max_loc_bins_skipped=2, magic_factor=4.0, min_time_bin_count=2, max_time_bins_skipped=1, return_intermediate_values=False, name="Poisson 2D"):
@@ -143,6 +147,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     :param return_intermediate_values: Also return additional values used by the algorithm?
     :type return_intermediate_values: bool, optional
 
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
+
     :return: When return_intermediate_values is False, returns the found 2D clusters.
     When return_intermediate_values is True, returns
     7-element tuple containing
@@ -158,11 +165,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured] if weigh_charges else 0
-    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    times = np.float64(times)
-    time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
+
     # %% Apply the 1D algorithm
-    loc_rectangles, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate = clusterize_poisson_1d(
+    loc_clusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate, fault_pd_level = clusterize_poisson_1d(
             (locations, charges, circuit.circuitlength),
             certainty=certainty,
             loc_bin_size=loc_bin_size,
@@ -172,6 +177,11 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
             max_bins_skipped=max_loc_bins_skipped,
             return_intermediate_values=True)
 
+    if not loc_clusters:
+        return ClusterEnsemble(set())
+    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    times = np.float64(times)
+    time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Find _nusters_
     is_below_quantile = loc_bin_contents < nominal_pd_quantile_level
 
@@ -185,7 +195,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     # (Although we suspect that this situation is actually impossible)
     if total_nusters_length < circuit.circuitlength * 0.1:
         print("2D poisson model failed on Circuit {0}: there are not enough line segments with nominal PD behaviour. 1D clusters will be returned.".format(circuit.circuitnr))
-        return loc_rectangles
+        return loc_clusters
 
     # %% For each PD, determine whether it lies in one of the nusters
 
@@ -213,17 +223,16 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
                                         weights=charges_in_nuster if weigh_charges else None,
                                         check_inside_bounds=False)
 
-
     # %% Discretize in second dimension
     found_2d_rectangles = set()
 
-    for loc_rectangle in loc_rectangles:
+    for loc_cluster in loc_clusters:
         # Potential speed-up: during the 1D algorithm, PDs were binned, so a list was created of _bin indices_. This list could be reused, to avoid the use of `which_pds_inside_location_range`.
-        in_current_loc_rectangle = which_pds_inside_location_range(loc_rectangle.location_range)
+        in_current_loc_rectangle = which_pds_inside_location_range(loc_cluster.location_range)
         times_in_loc_rectangle = times[in_current_loc_rectangle]
         if weigh_charges:
             charges_in_loc_rectangle = charges[in_current_loc_rectangle]
-        # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_rectangle.location_range)], bins=time_bins)
+        # NP.HISTOGRAM: clust_counts, _ = np.histogram(times[which_pds_inside_location_range(loc_cluster.location_range)], bins=time_bins)
 
         clust_counts = faster_histogram_1d(times_in_loc_rectangle,
                                            bins_start=times[0],
@@ -233,7 +242,7 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
                                            check_inside_bounds=False)
 
         # We study the ratio of PDs
-        rectangle_length = loc_rectangle.get_width()
+        rectangle_length = loc_cluster.get_width()
         nominal_ratio = rectangle_length / total_nusters_length
 
         # Dividing non-zero by zero (which gives np.inf) is a desired result.
@@ -246,13 +255,13 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
         for start_index, end_index in group_boolean_series(is_suspiciously_high_ratio, max_consecutive_false=max_time_bins_skipped, min_length=0, min_count=min_time_bin_count):
             # NP.HISTOGRAM: time_range = (time_bins[start_index], time_bins[end_index])
             time_range = (np.array([start_index, end_index]) * time_bin_size + times[0]).astype("datetime64[ns]")
-            rectangle = Rectangle(location_range=loc_rectangle.location_range, time_range=tuple(time_range), found_by=[name])
+            rectangle = Rectangle(location_range=loc_cluster.location_range, time_range=tuple(time_range), found_by=[name])
             found_2d_rectangles.add(rectangle)
 
     found_2d_clusters = ClusterEnsemble(Cluster({r}) for r in found_2d_rectangles)
     if return_intermediate_values:
         nusters = ClusterEnsemble(Cluster({Rectangle(location_range=tuple(r))}) for r in nuster_ranges)
-        return found_2d_clusters, loc_rectangles, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
+        return found_2d_clusters, loc_clusters, nusters, loc_bins, loc_bin_contents, nominal_pd_quantile_level, rate
     return found_2d_clusters
 
 
@@ -310,20 +319,20 @@ def group_boolean_series(series, max_consecutive_false=5, min_length=5, min_coun
 
     group_start = 0   # Beginindex van het huidige group
     gap_size = 0        # Lengte van de rij nee'tjes die nu wordt belopen
-    true_count = 0      # Aantal ja'tjes dat is gevonden in dit group
+    true_count = 0      # Aantal ja'tjes dat is gevonden in deze group
 
     for i, x in enumerate(series):
         if x:  # We doorlopen ja'tjes
             true_count += 1
             if gap_size > max_consecutive_false:   # Einde group
                 group_end = i - gap_size
-                if group_end - group_start >= min_length and true_count >= min_count:
+                if group_end - group_start >= min_length and true_count > min_count:
                     # group was lang genoeg en heeft genoeg ja'tjes:
                     groups.add((group_start, group_end))
 
-                # Begin een nieuw group
+                # Begin een nieuwe group
                 group_start = i
-                true_count = 0
+                true_count = 1
 
             gap_size = 0  # We doorlopen geen nee'tjes (meer)
 
@@ -338,7 +347,8 @@ def group_boolean_series(series, max_consecutive_false=5, min_length=5, min_coun
 
 
 def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, 'D'), sensitivity=1.0, name="Pinta"):
-    """Algorithm that identifies clusters by using the fact that a lot of 2D-bins have the same amount of partial discharges. If the "gap" between two bins is too high, it means there is something going on with the bin. It uses the following parameters:
+    """
+    Algorithm that identifies clusters by using the fact that a lot of 2D-bins have the same amount of partial discharges. If the "gap" between two bins is too high, it means there is something going on with the bin. It uses the following parameters:
 
     :param circuit: The circuit the clusterize.
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
@@ -351,6 +361,9 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     :param sensitivity: The higher this value, the more clusters the algorithm will find.
     :type minPts: float, optional
+
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
 
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
@@ -464,6 +477,9 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     :param shave: percentage of points that are removed from the edges of the clusters, to make them fit better
     :type shave: float
 
+    :param name: The name of the algorithm (for `Cluster.found_by`)
+    :type name: string, optional
+
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
     """
@@ -478,6 +494,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     # the following block of code is from https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
     # making a histogram of the data
     vals = np.array(pds)
+
     for val in vals:
         val[1] = val[1].value/1000000000/60/60/24/7/binLengthY
     vals = vals.T
@@ -595,6 +612,7 @@ def warnings_to_clusters(circuit, include_noise_warnings=True, rectangle_width=N
             warning_rectangles.add(Rectangle.from_circuit_warning(circuit, i, rectangle_width=rectangle_width))
     return ClusterEnsemble(Cluster({r}) for r in warning_rectangles)
 
+
 def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact=None, found_exact=None, loc_rect_size=32, time_rect_size=np.timedelta64(6, 'D'), name="Monte Carlo"):
     """
     Randomized Monte Carlo algorithm.
@@ -609,7 +627,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     choices_exact and found_exact can be set instead of choices_div and found_div
     In this case, the exact values are used for the number of random choices and the number of points that need to have found a cluster for it to be accepted
     If they are set to None, the dynamic calculation with choices_div and found_div is used instead
-    
+
     :param circuit: The circuit to clusterize
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
@@ -631,7 +649,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     :param time_rect_size: The size of rectangles in the time dimension
     :type time_rect_size: class:`numpy.timedelta64`, optional
 
-    :param name: The name of the algorithm
+    :param name: The name of the algorithm (for `Cluster.found_by`)
     :type name: string, optional
 
     :return: found clusters
@@ -639,7 +657,7 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     """
     locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
     times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
-    
+
     if choices_exact is None:
         time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
         num = int(circuit.circuitlength * time_factor)
@@ -668,4 +686,3 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, choices_exact
     for r in highly_found:
         r.found_by = {name}
     return ClusterEnsemble.from_iterable(highly_found)
-

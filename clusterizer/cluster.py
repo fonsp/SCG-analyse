@@ -1,8 +1,10 @@
+from functools import total_ordering
 import functools
 import numpy as np
-from . import rectangle
 import operator
 
+
+@total_ordering
 class Cluster:
     """
     A set of Rectangle objects
@@ -53,6 +55,15 @@ class Cluster:
         :rtype: iterator
         """
         return self.rectangles.__iter__()
+
+    def __lt__(self, other):
+        return self.get_bounding_rectangle() < other.get_bounding_rectangle()
+
+    def __eq__(self, other):
+        return self.rectangles == other.rectangles
+
+    def __hash__(self):
+        return sum(hash(r) for r in self.rectangles)
 
     def get_rectangles(self):
         """
@@ -210,14 +221,35 @@ class Cluster:
                 result.add(c)
         return Cluster(result)
 
+    def get_bounding_rectangle(self):
+        """Returns a single rectangle that contains all the rectangles of this cluster.
+
+        :rtype: class:`clusterizer.rectangle.Rectangle`
+        """
+        return functools.reduce(operator.__or__, self.rectangles)
+
+    def get_width(self):
+        """The distance in m between the two edges of the bounding rectangle. `numpy.inf` if undefined.
+
+        :rtype: float
+        """
+        return self.get_bounding_rectangle().get_width()
+
+    def get_duration(self):
+        """The time delta between the two edges of the bounding rectangle. `numpy.inf` if undefined.
+
+        :rtype: numpy.timedelta64
+        """
+        return self.get_bounding_rectangle().get_duration()
+
     @property
     def location_range(self):
-        return functools.reduce(operator.__or__, self.rectangles).location_range
+        return self.get_bounding_rectangle().location_range
 
     @property
     def time_range(self):
-        return functools.reduce(operator.__or__, self.rectangles).time_range
+        return self.get_bounding_rectangle().time_range
 
     @property
     def found_by(self):
-        return functools.reduce(operator.__or__, self.rectangles).found_by
+        return self.get_bounding_rectangle().found_by
