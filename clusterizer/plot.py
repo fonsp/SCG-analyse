@@ -271,7 +271,7 @@ def overlay_rectangle(rectangle, ax=None, color=None, opacity=.3, scale_opacity_
     # TODO: warn user when overlaying an empty plot
     show_date = rectangle.time_range is not None and axis_is_in_datetime_format(ax.yaxis)
 
-    clabel = None
+    clabel = ""
     if add_to_legend and rectangle.found_by:
         clabel = "Found by {}".format("; ".join(rectangle.found_by))
     if label is not None:
@@ -409,7 +409,12 @@ def legend_without_duplicate_labels(ax=None):
     if ax is None:
         ax = plt.gca()
     handles, labels = ax.get_legend_handles_labels()
-    ct = lambda h: tuple(h.get_facecolor()[0])
+    #ct = lambda h: tuple(h.get_facecolor()[0])
+
+    def ct(h):
+        if "get_facecolor" in dir(h):
+            return tuple(h.get_facecolor()[0])
+        return tuple(h.get_color())
     unique = [(h, l) for i, (h, l) in enumerate(zip(handles, labels)) if l not in labels[:i] or ct(h) not in map(ct, handles[:i])]
     ax.legend(*zip(*unique))
 
