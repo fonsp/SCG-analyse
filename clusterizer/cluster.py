@@ -19,10 +19,7 @@ class Cluster:
         self.rectangles = set(rectangles)
 
     def __str__(self):
-        result = "{"
-        for c in self.rectangles:
-            result += str(c) + "\n"
-        return result[:-1] + "}"
+        return "[" + ("\n".join(str(r) for r in self.rectangles)) + "]"
 
     def __repr__(self):
         return str(self)
