@@ -108,7 +108,7 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     return found_1d_clusters
 
 
-def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.timedelta64(7, 'D'), nominal_circuit_fraction=.80, weigh_charges=False, min_loc_bin_count=2, max_loc_bins_skipped=2, magic_factor=4.0, min_time_bin_count=2, max_time_bins_skipped=1, return_intermediate_values=False, name="Poisson 2D"):
+def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.timedelta64(7, 'D'), nominal_circuit_fraction=.80, weigh_charges=False, min_loc_bin_count=2, max_loc_bins_skipped=2, magic_factor=10.0, min_time_bin_count=2, max_time_bins_skipped=1, return_intermediate_values=False, name="Poisson 2D"):
     """Identify clusters using the Poisson algorithm, as described in TODO
 
     :param circuit: The circuit the clusterize.
