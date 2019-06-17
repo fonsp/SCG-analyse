@@ -1,6 +1,5 @@
 from clusterizer.cluster import Cluster
-
-
+import logging
 class ClusterEnsemble:
     """
     A Rectangle Ensemble should be a set of Cluster objects
@@ -35,7 +34,7 @@ class ClusterEnsemble:
         return ClusterEnsemble(ensemble)
 
     def __str__(self):
-        return "{" + ("\n".join(str(c) for c in self.clusters)) + "}"
+        return "{" + ("\n".join(str(c) for c in sorted(self.clusters))) + "}"
 
     def __repr__(self):
         return str(self)
@@ -83,28 +82,29 @@ class ClusterEnsemble:
         """
         return len(self.clusters)
 
-    def get_clusters(self):
+    def get_rectangles(self):
         """
-        Creates a single set containing all the Clusters from each Cluster in this ClusterEnsemble.
+        Creates a single set containing all the Rectangles from each Cluster in this ClusterEnsemble.
 
-        :return: All Clusters from all Clusters in this ClusterEnsemble
+        :return: All Rectangles from all Clusters in this ClusterEnsemble
         :rtype: set of class:`clusterizer.rectangle.Rectangle`
         """
         result = set()
         for s in self.clusters:
-            for clust in s:
-                result.add(clust)
+            for rect in s:
+                result.add(rect)
         return result
 
     def flatten(self):
-        """Returns a Cluster containing all Clusters contained in _any_ Cluster of this ClusterEnsemble.
+        """Returns a Cluster containing all Rectangles contained in _any_ Cluster of this ClusterEnsemble.
 
-        :return: A Cluster of all Clusters in all Clusters in this ClusterEnsemble
+        :return: A Cluster of all Rectangles in all Clusters in this ClusterEnsemble
         :rtype: class:`clusterizer.ensemble.Cluster
         """
+        logging.warn("DEPRECATED: Use `Cluster(ensemble.get_rectangles())` instead.")
         result = set()
         for c in self:
-            result |= c.as_set()
+            result |= set(c)
         return Cluster(result)
 
     def get_clusters(self):
@@ -114,6 +114,7 @@ class ClusterEnsemble:
         :return: The Clusters in this ClusterEnsemble
         :rtype: Collection of class:`clusterizer.ensemble.Cluster`
         """
+        logging.warn("DEPRECATED: Use `ensemble.clusters` instead.")
         return self.clusters
 
     def as_set(self):
@@ -123,6 +124,7 @@ class ClusterEnsemble:
         :return: The Clusters in this ClusterEnsemble
         :rtype: set of class:`clusterizer.ensemble.Cluster`
         """
+        logging.warn("DEPRECATED: Use `set(ensemble)` instead.")
         return set(self.clusters)
 
     def as_list(self):
@@ -132,6 +134,7 @@ class ClusterEnsemble:
         :return: The Clusters in this ClusterEnsemble
         :rtype: list of class:`clusterizer.ensemble.Cluster`
         """
+        logging.warn("DEPRECATED: Use `list(ensemble)` instead.")
         return list(self.clusters)
 
     def disjunct(self, other):

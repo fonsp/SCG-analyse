@@ -66,12 +66,12 @@ class Rectangle:
     def __str__(self):
         sentences = []
         if self.location_range is not None:
-            sentences.append("{0:.0f}m to {1:.0f}m".format(*self.location_range))
+            sentences.append("📏 {0:.0f}m to {1:.0f}m".format(*self.location_range))
         if self.time_range is not None:
-            sentences.append("{0} until {1}".format(*self.time_range))
+            sentences.append("⏱ {0} until {1}".format(*(str(np.datetime64(t, "D")) for t in self.time_range)))
         if self.found_by:
-            sentences.append("Found by: " + ', '.join(['%s']*len(self.found_by)) % tuple(self.found_by))
-        return "; ".join(sentences)
+            sentences.append("🔍 Found by: " + ', '.join(['%s']*len(self.found_by)) % tuple(self.found_by))
+        return " ▒ \t".join(sentences)
 
     def __repr__(self):
         return str(self)
@@ -248,7 +248,7 @@ class Rectangle:
     def __sub__(self, other):
         """
         Calculate self without other, overloading the - operator.
-        This is similar to the set-theoretic operation: self \ other.
+        This is similar to the set-theoretic operation: self \\ other.
         Unlike &, | and +, - is not commutative. self - other is not equal to other - self.
         Returns a set containing Rectangle objects. Together, these Rectangles represent self - other.
 
@@ -272,9 +272,9 @@ class Rectangle:
 
         if self.disjunct(other):
             return set([self])
-        #self - other is the same as self - (self & other), since (other - self) and self are disjunct
+        # self - other is the same as self - (self & other), since (other - self) and self are disjunct
         overlap = self & other
-        #For the range [ ] and overlap range { }, we can represent all cases with the model:
+        # For the range [ ] and overlap range { }, we can represent all cases with the model:
         # [ { } ], where we need to calculate the 3 ranges [ {, { }, and } ]
         left_locations = (self.location_range[0], overlap.location_range[0])   # [ {
         middle_locations = overlap.location_range                              # { }
@@ -285,8 +285,8 @@ class Rectangle:
             upper_times = (overlap.time_range[1], self.time_range[1])          # } ]
         else:
             lower_times, middle_times, upper_times = self.time_range, self.time_range, self.time_range
-        #Split rectangle into 9 regions in a 3x3 grid, of which the center region ({ }, { }) is never needed
-        #Depending on where self and other overlap, some of these can be empty
+        # Split rectangle into 9 regions in a 3x3 grid, of which the center region ({ }, { }) is never needed
+        # Depending on where self and other overlap, some of these can be empty
         lu = Rectangle(left_locations, upper_times, found_by=self.found_by)     # [ {, [ {
         mu = Rectangle(middle_locations, upper_times, found_by=self.found_by)   # { }, [ {
         ru = Rectangle(right_locations, upper_times, found_by=self.found_by)    # } ], [ {
@@ -297,7 +297,7 @@ class Rectangle:
         rl = Rectangle(right_locations, lower_times, found_by=self.found_by)    # } ], } ]
         mini_rectangles = [lu, mu, ru, lm, rm, ll, ml, rl]
         result = set()
-        #Filter out the empty regions of the 3x3 grid
+        # Filter out the empty regions of the 3x3 grid
         for c in mini_rectangles:
             if not empty_rectangle(c):
                 result.add(c)
@@ -324,8 +324,6 @@ class Rectangle:
         smo = self - other
         oms = other - self
         return set([overlap]) | smo | oms
-
-
 
     def get_partial_discharges(self, circuit):
         """Returns all PDs that lie in the Rectangle."""

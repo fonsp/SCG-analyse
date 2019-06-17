@@ -2,6 +2,7 @@ from functools import total_ordering
 import functools
 import numpy as np
 import operator
+import logging
 
 
 @total_ordering
@@ -69,6 +70,7 @@ class Cluster:
         :return: The Rectangles in this Cluster
         :rtype: Collection of class:`clusterizer.rectangle.Rectangle`
         """
+        logging.warn("DEPRECATED: Use `cluster.rectangles` instead.")
         return self.rectangles
 
     def as_set(self):
@@ -78,6 +80,7 @@ class Cluster:
         :return: The Rectangles in this Cluster
         :rtype: set of class:`clusterizer.rectangle.Rectangle`
         """
+        logging.warn("DEPRECATED: Use `set(cluster)` instead.")
         return set(self.rectangles)
 
     def as_list(self):
@@ -87,6 +90,7 @@ class Cluster:
         :return: The Rectangles in this Cluster
         :rtype: list of class:`clusterizer.rectangle.Rectangle`
         """
+        logging.warn("DEPRECATED: Use `list(cluster)` instead.")
         return list(self.rectangles)
 
     def disjunct(self, other):
@@ -203,7 +207,7 @@ class Cluster:
         return functools.reduce(np.logical_or, [cs.get_partial_discharge_mask(circuit) for cs in self.rectangles])
 
     def most_confident(self):
-        """Returns a new Cluster containing only those Clusters of `self` with the highest number of algorithms that found it.
+        """Returns a new Cluster containing only those Rectangles of `self` with the highest number of algorithms that found it.
 
         :return: The Rectangle object with the highest number of algorithms that found it
         :rtype: class:`clusterizer.ensemble.Cluster`
