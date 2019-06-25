@@ -1,5 +1,5 @@
 from clusterizer.cluster import Cluster
-
+import logging
 class ClusterEnsemble:
     """
     A Rectangle Ensemble should be a set of Cluster objects
@@ -8,12 +8,12 @@ class ClusterEnsemble:
     The Rectangle objects in each Cluster are 'rectangels' which combine to make a rectangle
     """
 
-    def __init__(self, sets):
+    def __init__(self, clusters):
         """
-        :param sets: The Cluster objects to be added to this ClusterEnsemble
-        :type sets: collection of class:`clusterizer.ensemble.Cluster`
+        :param clusters: The Cluster objects to be added to this ClusterEnsemble
+        :type clusters: collection of class:`clusterizer.ensemble.Cluster`
         """
-        self.sets = set(sets)
+        self.clusters = set(clusters)
 
     @staticmethod
     def from_iterable(rectangle_iterable):
@@ -34,10 +34,7 @@ class ClusterEnsemble:
         return ClusterEnsemble(ensemble)
 
     def __str__(self):
-        result = "{"
-        for c in self:
-            result += str(c) + "\n"
-        return result[:-1] + "}"
+        return "{" + ("\n".join(str(c) for c in sorted(self.clusters))) + "}"
 
     def __repr__(self):
         return str(self)
@@ -52,7 +49,7 @@ class ClusterEnsemble:
         :rtype: int
         """
         hashed = 0
-        for c in self.sets:
+        for c in self.clusters:
             hashed += hash(c)
         return hashed
 
@@ -65,58 +62,60 @@ class ClusterEnsemble:
         :return: An iterator over the Clusters in this ClusterEnsemble
         :rtype: iterator
         """
-        return self.sets.__iter__()
+        return self.clusters.__iter__()
 
     def __bool__(self):
         """
         Boolean representation of a ClusterEnsemble. Mirrors behaviour of sets.
 
-        :return: False if self.sets is empty, True if non-empty
+        :return: False if self.clusters is empty, True if non-empty
         :rtype: bool
         """
-        return bool(self.sets)
+        return bool(self.clusters)
 
     def __len__(self):
         """
         Number of Clusters in the ClusterEnsemble. Mirrors behaviour of sets.
 
-        :return: The length of self.sets
+        :return: The length of self.clusters
         :rtype: int
         """
-        return len(self.sets)
+        return len(self.clusters)
 
-    def get_clusters(self):
+    def get_rectangles(self):
         """
-        Creates a single set containing all the Clusters from each Cluster in this ClusterEnsemble.
+        Creates a single set containing all the Rectangles from each Cluster in this ClusterEnsemble.
 
-        :return: All Clusters from all Clusters in this ClusterEnsemble
+        :return: All Rectangles from all Clusters in this ClusterEnsemble
         :rtype: set of class:`clusterizer.rectangle.Rectangle`
         """
         result = set()
-        for s in self.sets:
-            for clust in s:
-                result.add(clust)
+        for s in self.clusters:
+            for rect in s:
+                result.add(rect)
         return result
 
     def flatten(self):
-        """Returns a Cluster containing all Clusters contained in _any_ Cluster of this ClusterEnsemble.
+        """Returns a Cluster containing all Rectangles contained in _any_ Cluster of this ClusterEnsemble.
 
-        :return: A Cluster of all Clusters in all Clusters in this ClusterEnsemble
+        :return: A Cluster of all Rectangles in all Clusters in this ClusterEnsemble
         :rtype: class:`clusterizer.ensemble.Cluster
         """
+        logging.warn("DEPRECATED: Use `Cluster(ensemble.get_rectangles())` instead.")
         result = set()
         for c in self:
-            result |= c.as_set()
+            result |= set(c)
         return Cluster(result)
 
-    def get_sets(self):
+    def get_clusters(self):
         """
         Returns the Clusters in this ClusterEnsemble, without casting to a specific collection type.
 
         :return: The Clusters in this ClusterEnsemble
         :rtype: Collection of class:`clusterizer.ensemble.Cluster`
         """
-        return self.sets
+        logging.warn("DEPRECATED: Use `ensemble.clusters` instead.")
+        return self.clusters
 
     def as_set(self):
         """
@@ -125,7 +124,8 @@ class ClusterEnsemble:
         :return: The Clusters in this ClusterEnsemble
         :rtype: set of class:`clusterizer.ensemble.Cluster`
         """
-        return set(self.sets)
+        logging.warn("DEPRECATED: Use `set(ensemble)` instead.")
+        return set(self.clusters)
 
     def as_list(self):
         """
@@ -134,7 +134,8 @@ class ClusterEnsemble:
         :return: The Clusters in this ClusterEnsemble
         :rtype: list of class:`clusterizer.ensemble.Cluster`
         """
-        return list(self.sets)
+        logging.warn("DEPRECATED: Use `list(ensemble)` instead.")
+        return list(self.clusters)
 
     def disjunct(self, other):
         """
@@ -186,18 +187,18 @@ class ClusterEnsemble:
         :rtype: class:`clusterizer.ensemble.ClusterEnsemble`
         """
         if self.disjunct(other):
-            return ClusterEnsemble(self.sets | other.sets)
-        result = ClusterEnsemble(self.sets)
-        helper = ClusterEnsemble(other.sets)
+            return ClusterEnsemble(self.clusters | other.clusters)
+        result = ClusterEnsemble(self.clusters)
+        helper = ClusterEnsemble(other.clusters)
         while helper:
-            helpercur = helper.sets.pop()
+            helpercur = helper.clusters.pop()
             for rcur in result:
                 if not helpercur.disjunct(rcur):
-                    helper.sets.add(helpercur | rcur)
-                    result.sets.remove(rcur)
+                    helper.clusters.add(helpercur | rcur)
+                    result.clusters.remove(rcur)
                     break
             else:
-                result.sets.add(helpercur)
+                result.clusters.add(helpercur)
         return result
 
     def __add__(self, other):
@@ -214,18 +215,18 @@ class ClusterEnsemble:
         :rtype: class:`clusterizer.ensemble.ClusterEnsemble`
         """
         if self.disjunct(other):
-            return ClusterEnsemble(self.sets | other.sets)
-        result = ClusterEnsemble(self.sets)
-        helper = ClusterEnsemble(other.sets)
+            return ClusterEnsemble(self.clusters | other.clusters)
+        result = ClusterEnsemble(self.clusters)
+        helper = ClusterEnsemble(other.clusters)
         while helper:
-            helpercur = helper.sets.pop()
+            helpercur = helper.clusters.pop()
             for rcur in result:
                 if not helpercur.disjunct(rcur):
-                    helper.sets.add(helpercur + rcur)
-                    result.sets.remove(rcur)
+                    helper.clusters.add(helpercur + rcur)
+                    result.clusters.remove(rcur)
                     break
             else:
-                result.sets.add(helpercur)
+                result.clusters.add(helpercur)
         return result
 
     def most_confident(self):

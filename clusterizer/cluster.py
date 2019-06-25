@@ -1,8 +1,11 @@
+from functools import total_ordering
 import functools
 import numpy as np
-from . import rectangle
 import operator
+import logging
 
+
+@total_ordering
 class Cluster:
     """
     A set of Rectangle objects
@@ -17,10 +20,7 @@ class Cluster:
         self.rectangles = set(rectangles)
 
     def __str__(self):
-        result = "{"
-        for c in self.rectangles:
-            result += str(c) + "\n"
-        return result[:-1] + "}"
+        return "[" + ("\n".join(str(r) for r in self.rectangles)) + "]"
 
     def __repr__(self):
         return str(self)
@@ -54,6 +54,15 @@ class Cluster:
         """
         return self.rectangles.__iter__()
 
+    def __lt__(self, other):
+        return self.get_bounding_rectangle() < other.get_bounding_rectangle()
+
+    def __eq__(self, other):
+        return self.rectangles == other.rectangles
+
+    def __hash__(self):
+        return sum(hash(r) for r in self.rectangles)
+
     def get_rectangles(self):
         """
         Returns the Rectangles in this Cluster, without casting to a specific collection type.
@@ -61,6 +70,7 @@ class Cluster:
         :return: The Rectangles in this Cluster
         :rtype: Collection of class:`clusterizer.rectangle.Rectangle`
         """
+        logging.warn("DEPRECATED: Use `cluster.rectangles` instead.")
         return self.rectangles
 
     def as_set(self):
@@ -70,6 +80,7 @@ class Cluster:
         :return: The Rectangles in this Cluster
         :rtype: set of class:`clusterizer.rectangle.Rectangle`
         """
+        logging.warn("DEPRECATED: Use `set(cluster)` instead.")
         return set(self.rectangles)
 
     def as_list(self):
@@ -79,6 +90,7 @@ class Cluster:
         :return: The Rectangles in this Cluster
         :rtype: list of class:`clusterizer.rectangle.Rectangle`
         """
+        logging.warn("DEPRECATED: Use `list(cluster)` instead.")
         return list(self.rectangles)
 
     def disjunct(self, other):
@@ -195,7 +207,7 @@ class Cluster:
         return functools.reduce(np.logical_or, [cs.get_partial_discharge_mask(circuit) for cs in self.rectangles])
 
     def most_confident(self):
-        """Returns a new Cluster containing only those Clusters of `self` with the highest number of algorithms that found it.
+        """Returns a new Cluster containing only those Rectangles of `self` with the highest number of algorithms that found it.
 
         :return: The Rectangle object with the highest number of algorithms that found it
         :rtype: class:`clusterizer.ensemble.Cluster`
@@ -210,14 +222,35 @@ class Cluster:
                 result.add(c)
         return Cluster(result)
 
+    def get_bounding_rectangle(self):
+        """Returns a single rectangle that contains all the rectangles of this cluster.
+
+        :rtype: class:`clusterizer.rectangle.Rectangle`
+        """
+        return functools.reduce(operator.__or__, self.rectangles)
+
+    def get_width(self):
+        """The distance in m between the two edges of the bounding rectangle. `numpy.inf` if undefined.
+
+        :rtype: float
+        """
+        return self.get_bounding_rectangle().get_width()
+
+    def get_duration(self):
+        """The time delta between the two edges of the bounding rectangle. `numpy.inf` if undefined.
+
+        :rtype: numpy.timedelta64
+        """
+        return self.get_bounding_rectangle().get_duration()
+
     @property
     def location_range(self):
-        return functools.reduce(operator.__or__, self.rectangles).location_range
+        return self.get_bounding_rectangle().location_range
 
     @property
     def time_range(self):
-        return functools.reduce(operator.__or__, self.rectangles).time_range
+        return self.get_bounding_rectangle().time_range
 
     @property
     def found_by(self):
-        return functools.reduce(operator.__or__, self.rectangles).found_by
+        return self.get_bounding_rectangle().found_by
