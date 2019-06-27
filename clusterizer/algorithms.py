@@ -295,7 +295,7 @@ def faster_histogram_1d(a, bins_start, bin_width, num_bins, weights=None, check_
         a_inside = a
         weights_inside = weights
 
-    bin_indices = ((a_inside - bins_start) * (1.0 / bin_width)).astype(np.int64)
+    bin_indices = ((a_inside - bins_start) * (1.0 / bin_width)).astype(np.int32)
     return np.bincount(bin_indices, weights=weights_inside, minlength=num_bins)
 
 
