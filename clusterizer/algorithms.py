@@ -50,8 +50,8 @@ def clusterize_poisson_1d(circuit, certainty=.95, loc_bin_size=4, nominal_circui
     # 7 is the length of X--X--X
     # right? ? ?
 
-    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
+    locations = circuit.pd["Location in meters (m)"][~np.isnan(circuit.pd['Location in meters (m)'])]
+    charges = circuit.pd["Charge (picocoulomb)"][~np.isnan(circuit.pd['Location in meters (m)'])]
     # %% Discretize PD locations
     # Could be sped up using more efficient methods, parallisation, and by taking advantage of the uniform bin size.
     # See: https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
@@ -148,9 +148,9 @@ def clusterize_poisson(circuit, certainty=.95, loc_bin_size=4, time_bin_size=np.
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble` or tuple
     """
     # TODO: The magic factor should be the 95% quantile of X/Y, where X,Y are two iid Poisson variables.
-    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    charges = circuit.pd["Charge (picocoulomb)"][circuit.pd_occured]
-    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    locations = circuit.pd["Location in meters (m)"][~np.isnan(circuit.pd['Location in meters (m)'])]
+    charges = circuit.pd["Charge (picocoulomb)"][~np.isnan(circuit.pd['Location in meters (m)'])]
+    times = circuit.pd["Date/time (UTC)"][~np.isnan(circuit.pd['Location in meters (m)'])]
     times = np.float64(times)
     time_bin_size = np.float64(np.timedelta64(time_bin_size, 'ns'))
     # %% Apply the 1D algorithm
@@ -397,8 +397,8 @@ def clusterize_pinta(circuit, placeinterval=10, timeinterval=np.timedelta64(7, '
 
     invsensitivity = 1.0 / sensitivity
 
-    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    locations = circuit.pd["Location in meters (m)"][~np.isnan(circuit.pd['Location in meters (m)'])]
+    times = circuit.pd["Date/time (UTC)"][~np.isnan(circuit.pd['Location in meters (m)'])]
     mintimes = min(times)
     times -= mintimes
     maxplace = max(locations)
@@ -461,7 +461,7 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     """
   
     # loading data
-    pds = circuit.pd[["Location in meters (m)", "Date/time (UTC)"]][circuit.pd_occured]
+    pds = circuit.pd[["Location in meters (m)", "Date/time (UTC)"]][~np.isnan(circuit.pd['Location in meters (m)'])]
     times = pds["Date/time (UTC)"]
     times2 = circuit.pd["Date/time (UTC)"]
     locations = pds["Location in meters (m)"]
@@ -469,12 +469,12 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     
     # the following block of code is from https://iscinumpy.gitlab.io/post/histogram-speeds-in-python/
     # making a histogram of the data
-    vals = np.array(pds)
+    vals = pds.to_numpy()
     for val in vals:
         val[1] = val[1].value/1000000000/60/60/24/7/binLengthY
     vals = vals.T
-    starttime = times2[0].value/1000000000/60/60/24/7/binLengthY
-    endtime = times2[len(circuit.pd)-1].value/1000000000/60/60/24/7/binLengthY
+    starttime = min(times2).value/1000000000/60/60/24/7/binLengthY
+    endtime = max(times2).value/1000000000/60/60/24/7/binLengthY
     endlocation = circuit.circuitlength
     bins = (int(endlocation/binLengthX), int(endtime-starttime))
     ranges = ((0,endlocation),(starttime,endtime))
@@ -513,21 +513,21 @@ def clusterize_DBSCAN(circuit, binLengthX = 2, binLengthY = 1, epsilon = 3, minP
     locUpper = [max([row[0] for row in weightedDataNoZero if row[2] == i]) + endlocation/bins[0]/2 for i in range(clusterAmount)]
     timeLower = [np.datetime64(int((min([row[1] for row in weightedDataNoZero if row[2] == i]) - ((endtime-starttime)/bins[1]/2))*60*60*24*7*binLengthY), 's') for i in range(clusterAmount)]
     timeUpper = [np.datetime64(int((max([row[1] for row in weightedDataNoZero if row[2] == i]) + ((endtime-starttime)/bins[1]/2))*60*60*24*7*binLengthY), 's') for i in range(clusterAmount)]
-    rectangles = set(Rectangle(location_range=(locLower[i], locUpper[i]), time_range=(timeLower[i], timeUpper[i])) for i in range(clusterAmount))
+    rectangles = set(Rectangle(location_range=(locLower[i], locUpper[i]), time_range=(timeLower[i], timeUpper[i]), found_by=[name]) for i in range(clusterAmount))
 
     # fit the clusters by shaving a small amount of points from the edges
-    rectangles2 = set()
-    for rectangle in rectangles:
-        locationIndex = locations[locations >= rectangle.location_range[0]][locations <= rectangle.location_range[1]].index
-        timeIndex = times[times >= rectangle.time_range[0]][times <= rectangle.time_range[1]].index
-        index = [point for point in locationIndex if point in timeIndex]
-        locations2 = locations.loc[index].sort_values()
-        beginLoc = locations2.iloc[int(len(locations2)*shave)+1]
-        endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
-        beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
-        endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
-        rectangles2.add(Rectangle(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
-    return(ClusterEnsemble(Cluster({r}) for r in rectangles2))
+    # rectangles2 = set()
+    # for rectangle in rectangles:
+    #     locationIndex = locations[locations >= rectangle.location_range[0]][locations <= rectangle.location_range[1]].index
+    #     timeIndex = times[times >= rectangle.time_range[0]][times <= rectangle.time_range[1]].index
+    #     index = [point for point in locationIndex if point in timeIndex]
+    #     locations2 = locations.loc[index].sort_values()
+    #     beginLoc = locations2.iloc[int(len(locations2)*shave)+1]
+    #     endLoc = locations2.iloc[int(len(locations2)*(1-shave))-1]
+    #     beginTime = np.datetime64(times.loc[index[int(len(index)*shave)+1]])
+    #     endTime = np.datetime64(times.loc[index[int(len(index)*(1-shave))-1]])
+    #     rectangles2.add(Rectangle(location_range=(beginLoc, endLoc), time_range=(beginTime, endTime), found_by=[name]))
+    return(ClusterEnsemble(Cluster({r}) for r in rectangles))
 
 
 def clusterize_ensemble_additive(circuit, algorithms=None, add=True):
@@ -615,8 +615,8 @@ def clusterize_Monte_Carlo(circuit, choices_div=100, found_div=50, loc_rect_size
     :return: found clusters
     :rtype: object of class:`clusterizer.cluster.ClusterEnsemble`
     """
-    locations = circuit.pd["Location in meters (m)"][circuit.pd_occured]
-    times = circuit.pd["Date/time (UTC)"][circuit.pd_occured]
+    locations = circuit.pd["Location in meters (m)"][~np.isnan(circuit.pd['Location in meters (m)'])]
+    times = circuit.pd["Date/time (UTC)"][~np.isnan(circuit.pd['Location in meters (m)'])]
     
     time_factor = (times[times.index[-1]] - times[times.index[0]]) / np.timedelta64(30, 'D')
     num = int(circuit.circuitlength * time_factor)
