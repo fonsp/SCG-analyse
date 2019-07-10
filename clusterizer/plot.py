@@ -1,4 +1,4 @@
-﻿import datetime
+import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -38,9 +38,9 @@ def draw_location_time_scatter(circuit, ax=None, dot_size_to_charge_ratio=5e3, d
         ax = plt.gca()
     label = "Circuit {0}".format(circuit.circuitnr) if add_to_legend else ""
 
-    locations = circuit.pd['Location in meters (m)'][~np.isnan(circuit.pd['Location in meters (m)'])].values
-    times = circuit.pd['Date/time (UTC)'][~np.isnan(circuit.pd['Location in meters (m)'])].values
-    charges = circuit.pd['Charge (picocoulomb)'][~np.isnan(circuit.pd['Location in meters (m)'])].values
+    locations = circuit.pd['Location in meters (m)'][circuit.pd_occured].values
+    times = circuit.pd['Date/time (UTC)'][circuit.pd_occured].values
+    charges = circuit.pd['Charge (picocoulomb)'][circuit.pd_occured].values
     if dot_size_to_charge_ratio is None:
         ax.scatter(x=locations, y=times, s=3, c=dot_colors, marker='8', edgecolors="none")
     else:
@@ -102,7 +102,7 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
     :param circuit: Circuit object
     :type circuit: class:`clusterizer.circuit.MergedCircuit`
 
-    :param partial_discharges: The partial discharges to be used to make the histogram. When set to None, circuit.pd[~np.isnan(circuit.pd['Location in meters (m)'])] is used as a default.
+    :param partial_discharges: The partial discharges to be used to make the histogram. When set to None, circuit.pd[circuit.pd_occured] is used as a default.
     :type partial_discharges: class:`pandas.core.frame.DataFrame`, optional
 
     :param weigh_charges: When set to `True`, PD charges are accumulated. otherwise PD occurences are counted.
@@ -126,7 +126,7 @@ def draw_time_hist(circuit, partial_discharges=None, weigh_charges=False, ax=Non
     if ax is None:
         ax = plt.gca()
     if partial_discharges is None:
-        partial_discharges = circuit.pd[~np.isnan(circuit.pd['Location in meters (m)'])]
+        partial_discharges = circuit.pd[circuit.pd_occured]
     time_column, location_column, charge_column = circuit.pd.columns
     convert_times = lambda s: datetime.datetime.strptime(str(s), "%Y-%m-%d %H:%M:%S")
     times = partial_discharges[time_column].apply(convert_times)
